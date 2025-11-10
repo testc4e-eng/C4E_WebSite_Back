@@ -38,10 +38,10 @@ app.use(express.json());
 
 /* ---------- UPLOADS dossier/disque ---------- */
 const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
-// Sur Render, monte un Disk persistant ici: /opt/render/project/src/uploads
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
+
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
