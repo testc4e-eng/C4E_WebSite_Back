@@ -273,6 +273,16 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Serveur fonctionne correctement', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/db/ping', async (req, res) => {
+  try {
+    const r = await pool.query('select current_user, current_database(), now()');
+    res.json({ ok: true, result: r.rows[0] });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
 /* ---------- Diagnostics ---------- */
 app.get('/api/candidatures_stage', async (req, res) => {
   try {
