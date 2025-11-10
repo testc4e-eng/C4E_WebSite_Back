@@ -13,17 +13,23 @@ const PORT = process.env.PORT || 3001;
 
 /* ---------- CORS via env ---------- */
 // ALLOWED_ORIGINS="http://localhost:5173,https://c4e-africa.com,https://www.c4e-africa.com,https://<ton-front>.onrender.com"
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+// ---- CORS dynamique depuis env ----
+const allowed = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 
+// Autorise aussi localhost en dev si tu veux
+if (process.env.NODE_ENV !== 'production') {
+  allowed.push('http://localhost:5173', 'http://localhost:8080');
+}
+
 app.use(cors({
-  origin(origin, cb) {
-    // autorise requêtes server-to-server ou outils sans Origin
-    if (!origin) return cb(null, true);
-    if (allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error(`Origin non autorisée: ${origin}`), false);
+  origin: function (origin, callback) {
+    // autorise les requêtes sans origin (ex: curl, Postman)
+    if (!origin) return callback(null, true);
+    if (allowed.includes(origin)) return callback(null, true);
+    return callback(new Error(`Origin ${origin} not allowed by CORS`));
   },
   credentials: false
 }));
