@@ -24,15 +24,14 @@ const allowedOrigins = [
 app.set('trust proxy', 1);
 
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // appels internes/serverside
-    return allowedOrigins.includes(origin)
-      ? cb(null, true)
-      : cb(new Error("Not allowed by CORS"));
+  origin: function (origin, cb) {
+    // autoriser aussi les requêtes sans origin (ex: curl, health checks)
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error(`CORS: origin non autorisée -> ${origin}`));
   },
-  credentials: true,
-  methods: ["GET","HEAD","PUT","PATCH","POST","DELETE"],
-  allowedHeaders: ["Content-Type","Authorization"]
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: false
 }));
 
 // très utile pour les preflight
