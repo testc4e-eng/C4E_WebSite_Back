@@ -14,25 +14,29 @@ const PORT = process.env.PORT || 3001;
 /* ---------- CORS via env ---------- */
 // ALLOWED_ORIGINS="http://localhost:5173,https://c4e-africa.com,https://www.c4e-africa.com,https://<ton-front>.onrender.com"
 // ---- CORS dynamique depuis env ----
-const allowed = (process.env.ALLOWED_ORIGINS || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "https://c4e-website-front.onrender.com",   // ton front Render
+  "https://www.c4e-africa.com",               // (si domaine GoDaddy plus tard)
+];
 
-// Autorise aussi localhost en dev si tu veux
-if (process.env.NODE_ENV !== 'production') {
-  allowed.push('http://localhost:5173', 'http://localhost:8080');
-}
+app.set('trust proxy', 1);
 
 app.use(cors({
-  origin: function (origin, callback) {
-    // autorise les requêtes sans origin (ex: curl, Postman)
-    if (!origin) return callback(null, true);
-    if (allowed.includes(origin)) return callback(null, true);
-    return callback(new Error(`Origin ${origin} not allowed by CORS`));
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // appels internes/serverside
+    return allowedOrigins.includes(origin)
+      ? cb(null, true)
+      : cb(new Error("Not allowed by CORS"));
   },
-  credentials: false
+  credentials: true,
+  methods: ["GET","HEAD","PUT","PATCH","POST","DELETE"],
+  allowedHeaders: ["Content-Type","Authorization"]
 }));
+
+// très utile pour les preflight
+app.options("*", cors());
 
 app.use(express.json());
 
