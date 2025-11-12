@@ -298,7 +298,7 @@ app.use((err, _req, res, _next) => {
 /* ----------------------------
    START
    ---------------------------- */
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 10002;
 app.listen(PORT, () => {
   console.log(`✅ Backend démarré sur le port ${PORT}`);
   console.log(`📁 UPLOAD_DIR = ${uploadDir}`);

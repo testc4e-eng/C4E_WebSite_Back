@@ -5,7 +5,29 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../db'); // attention au chemin si ta DB est dans le même dossier
+router.post('/login', async (req, res) => {
+  const { email, motDePasse } = req.body;
 
+  if (!email || !motDePasse) {
+    return res.status(400).json({ message: 'Email et mot de passe sont requis.' });
+  }
+
+  // Simuler utilisateur local
+  if (
+    (email === 'admin@test.com' && motDePasse === 'admin123') ||
+    (email === 'gestionnaire1@test.com' && motDePasse === 'c4e@test@2025')
+  ) {
+    return res.json({
+      message: 'Connexion réussie (mock).',
+      token: 'FAKE_JWT_TOKEN',
+      utilisateur: { id: 1, email }
+    });
+  }
+
+  return res.status(401).json({ message: 'Utilisateur non trouvé (mock).' });
+});
+
+/*
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { email, motDePasse } = req.body;
@@ -42,5 +64,6 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur lors de la connexion.' });
   }
 });
+*/ 
 
 module.exports = router;
