@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 router.post('/login', async (req, res) => {
   const { email, motDePasse, type } = req.body;
   // type = 'admin' ou 'gestionnaire' (par défaut gestionnaire)
-  const table = type === 'admin' ? 'admin' : 'gestionnaires';
+  const table = (type === 'admin' || type === 'administrateur') ? 'admin' : 'gestionnaires';
 
   if (!email || !motDePasse) return res.status(400).json({ message: 'Email et mot de passe requis.' });
 
