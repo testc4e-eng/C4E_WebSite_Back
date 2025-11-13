@@ -298,7 +298,12 @@ app.use((err, _req, res, _next) => {
 /* ----------------------------
    START
    ---------------------------- */
-const PORT = process.env.PORT || 10002;
+const PORT = process.env.PORT;
+if (!PORT) {
+  console.error('🚨 ERROR: La variable d\'environnement PORT n\'est pas définie. Render fournit automatiquement ce port.');
+  process.exit(1);
+}
+
 app.listen(PORT, () => {
   console.log(`✅ Backend démarré sur le port ${PORT}`);
   console.log(`📁 UPLOAD_DIR = ${uploadDir}`);

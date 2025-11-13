@@ -70,7 +70,7 @@ const safeQuery = async (client, query, type) => {
       }
 
       const baseData = {
-        id: c.id || i + Math.floor(Math.random() * 10001),
+        id: c.id || i + Math.floor(Math.random() * 10000),
         type: typeReel, // ← UTILISER LE TYPE RÉEL
         nom: `${c.nom ?? ''} ${c.prenom ?? ''}`.trim(),
         email: c.email,
@@ -378,7 +378,7 @@ router.get('/stages', async (req, res) => {
         : 0;
 
       return {
-        id: c.id || i + Math.floor(Math.random() * 10001),
+        id: c.id || i + Math.floor(Math.random() * 10000),
         type: 'stage',
         nom: `${c.nom ?? ''} ${c.prenom ?? ''}`.trim(),
         email: c.email,
