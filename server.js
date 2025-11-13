@@ -12,6 +12,7 @@ const pool = require('./db');
 
 const app = express();
 const authRoutes = require('./routes/auth');
+app.use('/api/auth', authRoutes);
 
 /* ----------------------------
    CORS (depuis ENV + fallback)
