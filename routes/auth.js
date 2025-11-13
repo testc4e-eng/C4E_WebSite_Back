@@ -17,6 +17,7 @@ router.post("/login", async (req, res) => {
 
     // Récupérer l’utilisateur depuis la table correspondante
 const result = await pool.query(`SELECT * FROM ${table} WHERE email = $1`, [email]);
+console.log("User trouvé :", result.rows);
 const rows = result.rows;
 
     if (rows.length === 0) {
