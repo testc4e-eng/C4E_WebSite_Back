@@ -16,7 +16,8 @@ router.post("/login", async (req, res) => {
     const table = userType === "administrateur" ? "admin" : "gestionnaires";
 
     // Récupérer l’utilisateur depuis la table correspondante
-    const [rows] = await pool.query(`SELECT * FROM ${table} WHERE email = ?`, [email]);
+const result = await pool.query(`SELECT * FROM ${table} WHERE email = $1`, [email]);
+const rows = result.rows;
 
     if (rows.length === 0) {
       return res.status(401).json({ message: "Utilisateur non trouvé." });
