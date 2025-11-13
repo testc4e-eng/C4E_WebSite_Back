@@ -42,19 +42,22 @@ const allowedOrigins = envOrigins.length ? envOrigins : defaultOrigins;
 app.set('trust proxy', 1);
 
 app.use(cors({
-  origin(origin, cb) {
-    // autoriser aussi les requêtes sans origin (curl, monitoring, Render, etc.)
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error(`CORS: origin non autorisée -> ${origin}`));
+  origin: function (origin, callback) {
+    // autoriser toutes les requêtes sans origin (curl, Render, etc.)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    console.log('CORS blocked:', origin);
+    return callback(new Error('CORS: Origin non autorisée'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false
+  credentials: true // si tu utilises cookies / JWT
 }));
 
 app.options('*', cors()); // preflight
 app.use(express.json({ limit: '10mb' }));
-app.use('/api/auth', authRoutes); // Toutes les routes auth
 /* ----------------------------
    UPLOADS (PDF seulement)
    ---------------------------- */
