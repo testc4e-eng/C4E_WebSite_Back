@@ -23,6 +23,11 @@ const envOrigins = (process.env.ALLOWED_ORIGINS || '')
   .map(s => s.trim())
   .filter(Boolean);
 
+//partie admin 
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', adminRoutes);
+//
+
 const defaultOrigins = [
   'http://localhost:5173',
   'http://localhost:8080',

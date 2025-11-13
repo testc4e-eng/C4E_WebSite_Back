@@ -1,52 +1,90 @@
-const express = require("express");
+// routes/admin.js
+const express = require('express');
 const router = express.Router();
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const pool = require("../db");
+const pool = require('../db');
+const bcrypt = require('bcrypt');
 
-router.post("/login", async (req, res) => {
-  const { email, motDePasse, userType } = req.body;
-
-  if (!email || !motDePasse || !userType) {
-    return res.status(400).json({ message: "Email, mot de passe et type d'utilisateur sont requis." });
+// GET utilisateurs par rôle
+router.get('/:role', async (req, res) => {
+  const role = req.params.role === 'administrateurs' ? 'administrateur' : 'gestionnaire';
+  try {
+    const result = await pool.query(
+      'SELECT id, email, role, statut, date_creation, dernier_connexion FROM utilisateurs WHERE role = $1 ORDER BY id ASC',
+      [role]
+    );
+    res.json({ data: result.rows });
+  } catch (err) {
+    console.error('GET utilisateurs error:', err);
+    res.status(500).json({ message: 'Erreur serveur.' });
   }
+});
+
+// CREATE utilisateur
+router.post('/:role', async (req, res) => {
+  const role = req.params.role === 'administrateurs' ? 'administrateur' : 'gestionnaire';
+  const { email, motDePasse } = req.body;
+
+  if (!email || !motDePasse) return res.status(400).json({ message: 'Email et mot de passe requis.' });
 
   try {
-    // Choisir la table selon le type
-    const table = userType === "administrateur" ? "admin" : "gestionnaires";
+    const hash = await bcrypt.hash(motDePasse, 10);
+    const result = await pool.query(
+      `INSERT INTO utilisateurs (email, mot_de_passe, role, statut, date_creation)
+       VALUES ($1,$2,$3,'actif',NOW()) RETURNING id, email, role, statut, date_creation`,
+      [email, hash, role]
+    );
+    res.status(201).json({ message: 'Utilisateur créé.', user: result.rows[0] });
+  } catch (err) {
+    console.error('POST utilisateur error:', err);
+    if (err.code === '23505') return res.status(400).json({ message: 'Email déjà utilisé.' });
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+});
 
-    // Récupérer l’utilisateur depuis la table correspondante
-const result = await pool.query(`SELECT * FROM ${table} WHERE email = $1`, [email]);
-console.log("User trouvé :", result.rows);
-const rows = result.rows;
+// UPDATE utilisateur (statut ou mot de passe)
+router.put('/:role/:id', async (req, res) => {
+  const { id } = req.params;
+  const { email, motDePasse, statut } = req.body;
 
-    if (rows.length === 0) {
-      return res.status(401).json({ message: "Utilisateur non trouvé." });
+  try {
+    const updates = [];
+    const values = [];
+    let idx = 1;
+
+    if (email) { updates.push(`email = $${idx++}`); values.push(email); }
+    if (motDePasse) { 
+      const hash = await bcrypt.hash(motDePasse, 10); 
+      updates.push(`mot_de_passe = $${idx++}`);
+      values.push(hash);
     }
+    if (statut) { updates.push(`statut = $${idx++}`); values.push(statut); }
 
-    const user = rows[0];
+    if (updates.length === 0) return res.status(400).json({ message: 'Aucune donnée à mettre à jour.' });
 
-    // Vérifier le mot de passe haché
-    const isMatch = await bcrypt.compare(motDePasse, user.mot_de_passe);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Mot de passe incorrect." });
-    }
-
-    // Génération du token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, userType },
-      process.env.JWT_SECRET || "C4E_AFRICA_2025_SECRET",
-      { expiresIn: "8h" }
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE utilisateurs SET ${updates.join(', ')} WHERE id = $${idx} RETURNING id, email, role, statut, date_creation`,
+      values
     );
 
-    // Réponse au frontend
-    res.json({
-      token,
-      user: { id: user.id, email: user.email, userType },
-    });
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Utilisateur non trouvé.' });
+    res.json({ message: 'Utilisateur mis à jour.', user: result.rows[0] });
   } catch (err) {
-    console.error("Erreur lors du login:", err);
-    res.status(500).json({ message: "Erreur serveur lors de la connexion." });
+    console.error('PUT utilisateur error:', err);
+    res.status(500).json({ message: 'Erreur serveur.' });
+  }
+});
+
+// DELETE utilisateur
+router.delete('/:role/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('DELETE FROM utilisateurs WHERE id = $1 RETURNING id', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Utilisateur non trouvé.' });
+    res.json({ message: 'Utilisateur supprimé.' });
+  } catch (err) {
+    console.error('DELETE utilisateur error:', err);
+    res.status(500).json({ message: 'Erreur serveur.' });
   }
 });
 
