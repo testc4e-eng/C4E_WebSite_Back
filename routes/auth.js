@@ -26,7 +26,7 @@ const rows = result.rows;
     const user = rows[0];
 
     // Vérifier le mot de passe haché
-    const isMatch = await bcrypt.compare(motDePasse, user.password);
+    const isMatch = await bcrypt.compare(motDePasse, user.mot_de_passe);
     if (!isMatch) {
       return res.status(401).json({ message: "Mot de passe incorrect." });
     }
