@@ -11,8 +11,6 @@ const jwt = require('jsonwebtoken');
 const pool = require('./db');
 
 const app = express();
-const authRoutes = require('./routes/auth');
-app.use('/api/auth', authRoutes);
 
 /* ----------------------------
    CORS (depuis ENV + fallback)
@@ -24,11 +22,6 @@ const envOrigins = (process.env.ALLOWED_ORIGINS || '')
   .map(s => s.trim())
   .filter(Boolean);
 
-//partie admin 
-const adminRoutes = require('./routes/admin');
-app.use('/api/admin', adminRoutes);
-//
-
 const defaultOrigins = [
   'http://localhost:5173',
   'http://localhost:8080',
@@ -38,6 +31,7 @@ const defaultOrigins = [
 ];
 
 const allowedOrigins = envOrigins.length ? envOrigins : defaultOrigins;
+console.log('✅ Allowed origins:', allowedOrigins);
 
 app.set('trust proxy', 1);
 
@@ -58,6 +52,16 @@ app.use(cors({
 
 app.options('*', cors()); // preflight
 app.use(express.json({ limit: '10mb' }));
+
+/* ----------------------------
+   Routes avant les autres middleware
+   ---------------------------- */
+const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
+
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+
 /* ----------------------------
    UPLOADS (PDF seulement)
    ---------------------------- */
@@ -84,12 +88,12 @@ app.use('/uploads', express.static(uploadDir));
    ROUTES TIERS
    ---------------------------- */
 const contactRoutes = require('./routes/contact');
-const candidaturesRoutes = require('./routes/candidatures'); // suppose un router indexant emploi/spontanée/stage
+const candidaturesRoutes = require('./routes/candidatures');
 const offresRoutes = require('./routes/offres');
 
-app.use('/contact', contactRoutes);                 // si déjà consommé côté front ainsi
-app.use('/api/candidatures', candidaturesRoutes);   // /api/candidatures/...
-app.use('/api/offres', offresRoutes);               // /api/offres/...
+app.use('/contact', contactRoutes);
+app.use('/api/candidatures', candidaturesRoutes);
+app.use('/api/offres', offresRoutes);
 
 /* ----------------------------
    ENDPOINTS SANTÉ / DIAGNOSTIC
@@ -238,7 +242,7 @@ app.post('/api/candidature-spontanee', upload.fields([
         const vals = Object.values(competencesObj).map(v => parseInt(v, 10) || 0).filter(v => v > 0);
         if (vals.length) {
           const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-          score = Math.max(0, Math.min(100, Math.round((avg / 5) * 100))); // normalisation /5
+          score = Math.max(0, Math.min(100, Math.round((avg / 5) * 100)));
         }
       } catch { competencesObj = {}; }
     }
