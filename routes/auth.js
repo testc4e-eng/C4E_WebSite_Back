@@ -6,15 +6,22 @@ const jwt = require('jsonwebtoken');
 
 // POST /api/auth/login - VERSION TABLE UNIFIÉE
 router.post('/login', async (req, res) => {
+  // AJOUT: Log complet de la requête
+  console.log("📨 REQUÊTE LOGIN REÇUE:");
+  console.log("📨 Headers:", req.headers);
+  console.log("📨 Body:", req.body);
+  console.log("📨 Content-Type:", req.headers['content-type']);
+  
   const { email, motDePasse } = req.body;
   
-  console.log("🔐 Tentative de connexion:", { 
-    email: email, 
-    hasPassword: !!motDePasse 
-  });
-
+  // AJOUT: Vérification détaillée du body
   if (!email || !motDePasse) {
-    console.log("❌ Champs manquants");
+    console.log("❌ Champs manquants détaillés:", {
+      email: email, 
+      motDePasse: motDePasse,
+      bodyExists: !!req.body,
+      bodyKeys: req.body ? Object.keys(req.body) : 'no body'
+    });
     return res.status(400).json({ 
       message: 'Email et mot de passe requis.',
       champsManquants: {
