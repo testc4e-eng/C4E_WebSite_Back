@@ -4,16 +4,15 @@ const pool = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
-// POST /api/auth/login - VERSION CORRIGÉE
+// POST /api/auth/login - VERSION TABLE UNIFIÉE
 router.post('/login', async (req, res) => {
-  const { email, motDePasse } = req.body; // On ne prend plus 'type' depuis le frontend
+  const { email, motDePasse } = req.body;
   
   console.log("🔐 Tentative de connexion:", { 
     email: email, 
     hasPassword: !!motDePasse 
   });
 
-  // Validation des champs requis
   if (!email || !motDePasse) {
     console.log("❌ Champs manquants");
     return res.status(400).json({ 
@@ -25,7 +24,6 @@ router.post('/login', async (req, res) => {
     });
   }
 
-  // Vérification JWT_SECRET
   if (!process.env.JWT_SECRET) {
     console.error('🚨 JWT_SECRET non défini !');
     return res.status(500).json({ 
@@ -35,63 +33,31 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    // 🔄 RECHERCHE DANS LES DEUX TABLES (admin puis gestionnaires)
-    let user = null;
-    let table = null;
-
-    console.log("🔍 Recherche dans la table admin...");
-    const adminResult = await pool.query(
-      `SELECT id, email, mot_de_passe, role, COALESCE(statut, 'actif') as statut 
-       FROM admin 
-       WHERE email = $1`,
+    // 🔄 RECHERCHE DANS LA TABLE UNIFIÉE
+    console.log("🔍 Recherche dans la table utilisateurs...");
+    const userResult = await pool.query(
+      `SELECT id, nom, email, mot_de_passe, role, type, statut, sites_geres
+       FROM utilisateurs 
+       WHERE email = $1 AND statut = 'actif'`,
       [email]
     );
 
-    if (adminResult.rows.length > 0) {
-      user = adminResult.rows[0];
-      table = 'admin';
-      console.log("✅ Administrateur trouvé");
-    } else {
-      console.log("🔍 Recherche dans la table gestionnaires...");
-      const gestionnaireResult = await pool.query(
-        `SELECT id, email, mot_de_passe, role, COALESCE(statut, 'actif') as statut 
-         FROM gestionnaires 
-         WHERE email = $1`,
-        [email]
-      );
-
-      if (gestionnaireResult.rows.length > 0) {
-        user = gestionnaireResult.rows[0];
-        table = 'gestionnaires';
-        console.log("✅ Gestionnaire trouvé");
-      }
-    }
-
-    if (!user) {
-      console.log("❌ Utilisateur non trouvé dans aucune table:", email);
+    if (userResult.rows.length === 0) {
+      console.log("❌ Utilisateur non trouvé ou compte inactif:", email);
       return res.status(401).json({ 
         message: 'Email ou mot de passe incorrect.',
         code: 'UTILISATEUR_NON_TROUVE'
       });
     }
 
+    const user = userResult.rows[0];
     console.log("👤 Utilisateur trouvé:", { 
       id: user.id, 
       email: user.email, 
       role: user.role,
-      statut: user.statut,
-      table: table
+      type: user.type,
+      statut: user.statut
     });
-
-    // Vérification du statut
-    if (user.statut !== 'actif') {
-      console.log("❌ Compte inactif:", user.email);
-      return res.status(403).json({ 
-        message: 'Votre compte est désactivé. Contactez un administrateur.',
-        code: 'COMPTE_DESACTIVE',
-        statut: user.statut
-      });
-    }
 
     // Vérification du mot de passe
     console.log("🔐 Vérification mot de passe...");
@@ -108,7 +74,7 @@ router.post('/login', async (req, res) => {
     // Mise à jour dernière connexion
     try {
       await pool.query(
-        `UPDATE ${table} SET dernier_connexion = NOW() WHERE id = $1`,
+        `UPDATE utilisateurs SET dernier_connexion = NOW() WHERE id = $1`,
         [user.id]
       );
       console.log("✅ Dernière connexion mise à jour");
@@ -116,16 +82,13 @@ router.post('/login', async (req, res) => {
       console.warn("⚠️ Erreur mise à jour dernière connexion:", updateErr.message);
     }
 
-    // Détermination du type pour le frontend
-    const userType = table === 'admin' ? 'administrateur' : 'gestionnaire';
-
     // Génération du token JWT
     console.log("🎫 Génération du token JWT...");
     const tokenPayload = {
       id: user.id,
       email: user.email,
       role: user.role,
-      type: userType // 'administrateur' ou 'gestionnaire'
+      type: user.type // 'administrateur' ou 'gestionnaire'
     };
 
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { 
@@ -133,19 +96,20 @@ router.post('/login', async (req, res) => {
     });
 
     console.log("✅ Connexion réussie pour:", user.email);
-    console.log("👤 Type d'utilisateur:", userType);
-    console.log("🔑 Token généré - Expiration: 24h");
+    console.log("👤 Type d'utilisateur:", user.type);
 
-    // Réponse réussie - IMPORTANT: utiliser 'type' au lieu de 'userType' pour correspondre au frontend
+    // Réponse réussie avec redirection appropriée
     res.json({
       message: 'Connexion réussie',
       token: token,
       user: {
         id: user.id,
+        nom: user.nom,
         email: user.email,
         role: user.role,
-        type: userType, // 'administrateur' ou 'gestionnaire'
-        statut: user.statut
+        type: user.type, // 'administrateur' ou 'gestionnaire'
+        statut: user.statut,
+        sites_geres: user.sites_geres
       },
       expiresIn: '24h'
     });
@@ -160,7 +124,45 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Les autres routes (verify et me) restent inchangées
+// 🔧 ROUTE TEMPORAIRE POUR METTRE À JOUR LES MOTS DE PASSE - À SUPPRIMER APRÈS USAGE
+router.post('/update-passwords', async (req, res) => {
+  try {
+    const newPassword = 'c4e@test@2025';
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    console.log('🔄 Mise à jour des mots de passe...');
+    console.log('📧 Emails concernés: c4e.africa@gmail.com, rhc4eafrica@gmail.com');
+    
+    // Mettre à jour les deux comptes
+    const result = await pool.query(
+      'UPDATE utilisateurs SET mot_de_passe = $1 WHERE email IN ($2, $3)',
+      [hashedPassword, 'c4e.africa@gmail.com', 'rhc4eafrica@gmail.com']
+    );
+    
+    console.log('✅ Mots de passe mis à jour pour', result.rowCount, 'utilisateurs');
+    
+    // Vérifier quels comptes ont été mis à jour
+    const updatedUsers = await pool.query(
+      'SELECT email, nom, type FROM utilisateurs WHERE email IN ($1, $2)',
+      ['c4e.africa@gmail.com', 'rhc4eafrica@gmail.com']
+    );
+    
+    res.json({ 
+      message: 'Mots de passe mis à jour avec succès',
+      usersUpdated: result.rowCount,
+      updatedUsers: updatedUsers.rows
+    });
+    
+  } catch (err) {
+    console.error('❌ Erreur mise à jour mots de passe:', err);
+    res.status(500).json({ 
+      error: err.message,
+      code: 'ERREUR_MISE_A_JOUR_MDP'
+    });
+  }
+});
+
+// Route pour vérifier le token (keep existing)
 router.post('/verify', async (req, res) => {
   const { token } = req.body;
 
@@ -174,39 +176,31 @@ router.post('/verify', async (req, res) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Déterminer la table en fonction du type
-    const table = decoded.type === 'administrateur' ? 'admin' : 'gestionnaires';
     const userExists = await pool.query(
-      `SELECT id, email, role, COALESCE(statut, 'actif') as statut 
-       FROM ${table} 
-       WHERE id = $1 AND email = $2`,
+      `SELECT id, email, role, type, statut, nom, prenom
+       FROM utilisateurs 
+       WHERE id = $1 AND email = $2 AND statut = 'actif'`,
       [decoded.id, decoded.email]
     );
 
     if (userExists.rows.length === 0) {
       return res.status(401).json({ 
-        message: 'Utilisateur non trouvé',
+        message: 'Utilisateur non trouvé ou compte inactif',
         valid: false
       });
     }
 
     const user = userExists.rows[0];
     
-    if (user.statut !== 'actif') {
-      return res.status(403).json({ 
-        message: 'Compte désactivé',
-        valid: false,
-        statut: user.statut
-      });
-    }
-
     res.json({
       valid: true,
       user: {
         id: user.id,
         email: user.email,
         role: user.role,
-        type: decoded.type
+        type: user.type,
+        nom: user.nom,
+        prenom: user.prenom
       },
       expiresIn: decoded.exp
     });
@@ -220,20 +214,16 @@ router.post('/verify', async (req, res) => {
         valid: false,
         expired: true
       });
-    } else if (err.name === "JsonWebTokenError") {
-      return res.status(401).json({ 
-        message: 'Token invalide',
-        valid: false
-      });
     } else {
       return res.status(401).json({ 
-        message: 'Erreur de vérification',
+        message: 'Token invalide',
         valid: false
       });
     }
   }
 });
 
+// Route pour obtenir les infos de l'utilisateur connecté (keep existing)
 router.get('/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   
@@ -249,14 +239,11 @@ router.get('/me', async (req, res) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Déterminer la table en fonction du type
-    const table = decoded.type === 'administrateur' ? 'admin' : 'gestionnaires';
-    
     const userResult = await pool.query(
-      `SELECT id, email, role, COALESCE(statut, 'actif') as statut, 
-              date_creation, dernier_connexion
-       FROM ${table} 
-       WHERE id = $1 AND email = $2`,
+      `SELECT id, email, role, type, statut, nom, prenom, 
+              date_creation, dernier_connexion, telephone, sites_geres
+       FROM utilisateurs 
+       WHERE id = $1 AND email = $2 AND statut = 'actif'`,
       [decoded.id, decoded.email]
     );
 
@@ -275,8 +262,12 @@ router.get('/me', async (req, res) => {
         id: user.id,
         email: user.email,
         role: user.role,
-        type: decoded.type,
+        type: user.type,
         statut: user.statut,
+        nom: user.nom,
+        prenom: user.prenom,
+        telephone: user.telephone,
+        sites_geres: user.sites_geres,
         date_creation: user.date_creation,
         dernier_connexion: user.dernier_connexion
       }
