@@ -38,16 +38,15 @@ router.post('/', async (req, res) => {
     }
 
     // 3️⃣ Configuration du transporteur Nodemailer
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT) || 465,
-      secure: process.env.SMTP_SECURE !== 'false', // true par défaut pour Gmail
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT) || 465,
+  secure: process.env.SMTP_SECURE !== 'false',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
     // 4️⃣ Vérification de la connexion SMTP
     await transporter.verify();
     console.log('✅ Connexion SMTP vérifiée');
@@ -84,6 +83,14 @@ router.post('/', async (req, res) => {
         </div>
       `,
     };
+
+    // Ajoutez cette vérification AVANT d'envoyer l'email
+console.log('🔧 Configuration SMTP corrigée:', {
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  user: process.env.SMTP_USER,
+  hasPassword: !!process.env.SMTP_PASS
+});
 
     // 6️⃣ Envoi de l'email
     const info = await transporter.sendMail(mailOptions);
