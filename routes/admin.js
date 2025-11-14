@@ -1,4 +1,4 @@
-// 📂 routes/admin.js - VERSION CORRIGÉE
+// 📂 routes/admin.js - VERSION TABLE UNIFIÉE
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcrypt");
@@ -31,27 +31,27 @@ const verifyAdmin = (req, res, next) => {
   }
 };
 
-// CREATE utilisateur - VERSION SIMPLIFIÉE ET CORRIGÉE
+// CREATE utilisateur - VERSION TABLE UNIFIÉE
 router.post("/:type", verifyAdmin, async (req, res) => {
   try {
     console.log("📥 POST reçu - Type:", req.params.type);
     console.log("📦 Body reçu:", req.body);
     
-    const { email, motDePasse } = req.body;
+    const { email, motDePasse, nom } = req.body;
     
-    // Validation simple
+    // Validation
     if (!email || !motDePasse) {
       return res.status(400).json({ message: "Email et mot de passe requis" });
     }
 
-    // Déterminer la table et le rôle
-    const table = req.params.type === "administrateurs" ? "admin" : "gestionnaires";
+    // Déterminer le type d'utilisateur
+    const userType = req.params.type === "administrateurs" ? "administrateur" : "gestionnaire";
     const role = req.params.type === "administrateurs" ? "admin" : "gestionnaire";
     
     console.log("🔍 Vérification email...");
     
-    // Vérifier si l'email existe déjà
-    const exist = await pool.query(`SELECT id FROM ${table} WHERE email = $1`, [email]);
+    // Vérifier si l'email existe déjà dans utilisateurs
+    const exist = await pool.query(`SELECT id FROM utilisateurs WHERE email = $1`, [email]);
     if (exist.rows.length > 0) {
       return res.status(409).json({ message: "Email déjà utilisé" });
     }
@@ -61,35 +61,24 @@ router.post("/:type", verifyAdmin, async (req, res) => {
     const hashedPassword = await bcrypt.hash(motDePasse, 10);
 
     console.log("💾 Insertion en base...");
-    // Insertion avec gestion d'erreur
+    // Insertion dans la table unifiée utilisateurs
     const result = await pool.query(
-      `INSERT INTO ${table} (email, mot_de_passe, role, date_creation, statut) 
-       VALUES ($1, $2, $3, NOW(), 'actif') 
-       RETURNING id, email, role, date_creation, statut`,
-      [email, hashedPassword, role]
+      `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, type, statut, date_creation) 
+       VALUES ($1, $2, $3, $4, $5, 'actif', NOW()) 
+       RETURNING id, nom, email, role, type, date_creation, statut`,
+      [nom || 'Utilisateur', email, hashedPassword, role, userType]
     );
 
     console.log("✅ Utilisateur créé");
     
     res.status(201).json({ 
-      message: `${req.params.type === "administrateurs" ? "Administrateur" : "Gestionnaire"} créé avec succès`,
+      message: `${userType === "administrateur" ? "Administrateur" : "Gestionnaire"} créé avec succès`,
       success: true,
       user: result.rows[0]
     });
     
   } catch (err) {
     console.error("❌ ERREUR CREATE:", err);
-    
-    // Gestion spécifique des erreurs PostgreSQL
-    if (err.code === '42P01') { // Table n'existe pas
-      return res.status(500).json({ 
-        message: `La table ${req.params.type === "administrateurs" ? "admin" : "gestionnaires"} n'existe pas` 
-      });
-    }
-    
-    if (err.code === '23505') { // Violation contrainte unique
-      return res.status(409).json({ message: "Email déjà utilisé" });
-    }
     
     res.status(500).json({ 
       message: "Erreur serveur lors de la création",
@@ -98,33 +87,62 @@ router.post("/:type", verifyAdmin, async (req, res) => {
   }
 });
 
-// GET utilisateurs
-router.get("/:type", verifyAdmin, async (req, res) => {
+// GET gestionnaires - ROUTE SPÉCIFIQUE CORRIGÉE
+router.get("/gestionnaires", verifyAdmin, async (req, res) => {
   try {
-    const table = req.params.type === "administrateurs" ? "admin" : "gestionnaires";
+    console.log("🔍 Récupération des gestionnaires...");
     
     const result = await pool.query(`
-      SELECT id, email, role, date_creation, 
-             COALESCE(statut, 'actif') as statut, 
-             dernier_connexion
-      FROM ${table} 
-      ORDER BY id
+      SELECT id, nom, email, role, type, statut, 
+             date_creation, dernier_connexion, sites_geres
+      FROM utilisateurs 
+      WHERE type = 'gestionnaire' 
+      ORDER BY date_creation DESC
     `);
     
-    res.json({ data: result.rows });
+    console.log(`✅ ${result.rows.length} gestionnaires trouvés`);
+    res.json(result.rows);
+    
   } catch (err) {
-    console.error("GET error:", err);
-    res.status(500).json({ message: "Erreur serveur" });
+    console.error('❌ Erreur /api/admin/gestionnaires:', err);
+    res.status(500).json({ 
+      message: 'Erreur serveur lors de la récupération des gestionnaires',
+      error: err.message 
+    });
   }
 });
 
-// DELETE utilisateur
+// GET administrateurs
+router.get("/administrateurs", verifyAdmin, async (req, res) => {
+  try {
+    console.log("🔍 Récupération des administrateurs...");
+    
+    const result = await pool.query(`
+      SELECT id, nom, email, role, type, statut, 
+             date_creation, dernier_connexion
+      FROM utilisateurs 
+      WHERE type = 'administrateur' 
+      ORDER BY date_creation DESC
+    `);
+    
+    console.log(`✅ ${result.rows.length} administrateurs trouvés`);
+    res.json(result.rows);
+    
+  } catch (err) {
+    console.error('❌ Erreur /api/admin/administrateurs:', err);
+    res.status(500).json({ 
+      message: 'Erreur serveur lors de la récupération des administrateurs',
+      error: err.message 
+    });
+  }
+});
+
+// DELETE utilisateur - VERSION TABLE UNIFIÉE
 router.delete("/:type/:id", verifyAdmin, async (req, res) => {
   try {
     const { type, id } = req.params;
-    const table = type === "administrateurs" ? "admin" : "gestionnaires";
     
-    await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
+    await pool.query(`DELETE FROM utilisateurs WHERE id = $1 AND type = $2`, [id, type === "administrateurs" ? "administrateur" : "gestionnaire"]);
     
     res.json({ 
       message: "Utilisateur supprimé avec succès",
