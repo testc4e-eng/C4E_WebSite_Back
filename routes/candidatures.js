@@ -38,7 +38,6 @@ const generateFileUrl = (filePath) => {
 };
 
 // 🔹 Fonction sécurisée de récupération et transformation des candidatures
-// 🔹 Fonction sécurisée de récupération et transformation des candidatures - CORRIGÉE
 const safeQuery = async (client, query, type) => {
   try {
     const { rows } = await client.query(query);
@@ -71,7 +70,7 @@ const safeQuery = async (client, query, type) => {
 
       const baseData = {
         id: c.id || i + Math.floor(Math.random() * 10000),
-        type: typeReel, // ← UTILISER LE TYPE RÉEL
+        type: typeReel,
         nom: `${c.nom ?? ''} ${c.prenom ?? ''}`.trim(),
         email: c.email,
         telephone: c.telephone,
@@ -85,8 +84,8 @@ const safeQuery = async (client, query, type) => {
         poste: c.poste || 'Non spécifié',
         diplome: c.diplome || 'Non spécifié',
         experience: c.experience || '0',
-        offre_type: c.offre_type, // ← INCLURE offre_type pour le debug
-        offre_id: c.offre_id // ← INCLURE offre_id
+        offre_type: c.offre_type,
+        offre_id: c.offre_id
       };
 
       // Champs spécifiques selon type
@@ -103,6 +102,7 @@ const safeQuery = async (client, query, type) => {
     return [];
   }
 };
+
 // ---------- Routes principales ----------
 
 // 🔹 Récupérer toutes les candidatures
@@ -123,7 +123,7 @@ router.get('/', async (req, res) => {
        FROM candidatures_emploi c
        LEFT JOIN offres_emploi o ON c.offre_id = o.id
        ORDER BY c.date_soumission DESC`,
-      'mixed' // Type mixte, sera déterminé par offre_type
+      'mixed'
     );
     candidatures.push(...toutesCandidatures);
 
@@ -179,46 +179,258 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 🔹 Modifier le statut d'une candidature
+// 🔹 Envoi email candidat - VERSION CORRIGÉE ET AMÉLIORÉE
+async function envoyerEmailCandidat(email, nom, statut, typePoste = 'poste') {
+  // Validation des paramètres
+  if (!email || !nom || !statut) {
+    console.error('❌ Paramètres manquants pour envoi email:', { email, nom, statut });
+    return;
+  }
+
+  console.log(`📧 Tentative d'envoi d'email à: ${email} (${nom}) - Statut: ${statut}`);
+
+  try {
+    // Vérifier que la configuration SMTP existe
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.error('❌ Configuration SMTP manquante dans les variables d\'environnement');
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      },
+      connectionTimeout: 10000,
+      socketTimeout: 10000
+    });
+
+    // Vérifier la connexion SMTP
+    await transporter.verify();
+    console.log('✅ Connexion SMTP vérifiée');
+
+    let sujet, html;
+
+    if (statut === 'acceptee') {
+      sujet = 'Félicitations ! Votre candidature a été retenue - C4E Africa';
+      html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #2e7d32; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background: #f9f9f9; }
+            .footer { padding: 20px; text-align: center; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>C4E Africa</h1>
+            </div>
+            <div class="content">
+              <h2>Bonjour ${nom},</h2>
+              <p>Nous avons le plaisir de vous informer que votre candidature pour <strong>${typePoste}</strong> a été <strong style="color: #2e7d32;">acceptée</strong>.</p>
+              <p>Notre équipe RH vous contactera dans les plus brefs délais pour planifier un entretien et finaliser les prochaines étapes.</p>
+              <p>Nous vous remercions pour l'intérêt que vous portez à C4E Africa et nous réjouissons de vous rencontrer.</p>
+            </div>
+            <div class="footer">
+              <p>Cordialement,<br><strong>L'équipe des Ressources Humaines</strong><br>C4E Africa</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+    } else if (statut === 'refusee') {
+      sujet = 'Réponse à votre candidature - C4E Africa';
+      html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #d32f2f; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background: #f9f9f9; }
+            .footer { padding: 20px; text-align: center; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>C4E Africa</h1>
+            </div>
+            <div class="content">
+              <h2>Bonjour ${nom},</h2>
+              <p>Nous vous remercions d'avoir postulé pour le poste de <strong>${typePoste}</strong> chez <strong>C4E Africa</strong>.</p>
+              <p>Après une étude attentive de votre profil, nous sommes au regret de vous informer que votre candidature n'a pas été retenue pour cette opportunité.</p>
+              <p>Nous conservons votre CV dans notre base de données et ne manquerons pas de vous recontacter pour des postes correspondant davantage à votre profil.</p>
+              <p>Nous vous souhaitons plein de succès dans vos recherches futures.</p>
+            </div>
+            <div class="footer">
+              <p>Cordialement,<br><strong>L'équipe des Ressources Humaines</strong><br>C4E Africa</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+    } else {
+      console.log('⚠️  Statut non géré pour envoi email:', statut);
+      return;
+    }
+
+    // Envoyer l'email
+    const info = await transporter.sendMail({
+      from: `"C4E Africa - RH" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: sujet,
+      html: html,
+      text: sujet.replace(/<[^>]*>/g, '')
+    });
+
+    console.log(`✅ Email envoyé avec succès à: ${email}`);
+    console.log(`📨 Message ID: ${info.messageId}`);
+
+  } catch (err) {
+    console.error('❌ Erreur détaillée envoi email:', err);
+    console.log('⚠️  L\'email n\'a pas pu être envoyé, mais le statut a été mis à jour');
+  }
+}
+
+// 🔹 Modifier le statut d'une candidature - VERSION CORRIGÉE
 router.put('/statut/:type/:id', async (req, res) => {
   const { id, type } = req.params;
   const { statut } = req.body;
+  
+  console.log('🚀 MISE À JOUR STATUT - Données reçues:');
+  console.log('   ID:', id);
+  console.log('   Type:', type);
+  console.log('   Statut:', statut);
+  console.log('   Body complet:', req.body);
+
   const validStatuts = ['en_attente', 'acceptee', 'refusee'];
-  if (!validStatuts.includes(statut)) return res.status(400).json({ error: 'Statut invalide.' });
+  if (!validStatuts.includes(statut)) {
+    console.error('❌ Statut invalide:', statut);
+    return res.status(400).json({ error: 'Statut invalide.' });
+  }
 
-  const tableMap = { emploi: 'candidatures_emploi', stage: 'candidatures_stage', pfe: 'candidatures_emploi', spontanee: 'candidatures_spontanees' };
+  // CORRECTION DU MAPPING DES TABLES
+  const tableMap = { 
+    emploi: 'candidatures_emploi', 
+    stage: 'candidatures_emploi',  // Les stages sont dans candidatures_emploi
+    pfe: 'candidatures_emploi',
+    spontanee: 'candidatures_spontanees',
+    stage_spontane: 'candidatures_stage'
+  };
+  
   const table = tableMap[type];
-  if (!table) return res.status(400).json({ error: 'Type de candidature invalide.' });
+  if (!table) {
+    console.error('❌ Type de candidature invalide:', type);
+    return res.status(400).json({ error: 'Type de candidature invalide.' });
+  }
 
+  let client;
   try {
-    const result = await pool.query(`UPDATE ${table} SET statut = $1 WHERE id = $2 RETURNING nom, email`, [statut, id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Candidature introuvable.' });
+    client = await pool.connect();
+    
+    console.log(`🔍 Recherche dans la table: ${table}, ID: ${id}`);
 
-    const { nom, email } = result.rows[0];
-    await envoyerEmailCandidat(email, nom, statut);
-    res.json({ success: true, message: 'Statut mis à jour et email envoyé.' });
+    // Récupérer les infos complètes de la candidature
+    const selectQuery = `SELECT * FROM ${table} WHERE id = $1`;
+    const selectResult = await client.query(selectQuery, [id]);
+    
+    if (selectResult.rows.length === 0) {
+      console.error('❌ Candidature introuvable');
+      return res.status(404).json({ error: 'Candidature introuvable.' });
+    }
+
+    const candidature = selectResult.rows[0];
+    console.log('✅ Candidature trouvée:', {
+      id: candidature.id,
+      nom: candidature.nom,
+      prenom: candidature.prenom,
+      email: candidature.email,
+      poste: candidature.poste,
+      domaine: candidature.domaine
+    });
+
+    // Mettre à jour le statut
+    const updateQuery = `UPDATE ${table} SET statut = $1 WHERE id = $2 RETURNING *`;
+    const updateResult = await client.query(updateQuery, [statut, id]);
+    
+    console.log('✅ Statut mis à jour en base de données');
+
+    // Préparer l'envoi de l'email
+    const nomComplet = `${candidature.nom || ''} ${candidature.prenom || ''}`.trim();
+    const email = candidature.email;
+    const poste = candidature.poste || candidature.domaine || 'poste';
+
+    console.log(`📧 Préparation envoi email à: ${email}`);
+    console.log(`   Nom: ${nomComplet}`);
+    console.log(`   Poste: ${poste}`);
+    console.log(`   Statut: ${statut}`);
+
+    // Envoyer l'email (ne pas attendre pour répondre au client)
+    envoyerEmailCandidat(email, nomComplet, statut, poste)
+      .then(() => console.log('✅ Email envoyé avec succès'))
+      .catch(err => console.error('❌ Erreur envoi email:', err));
+
+    res.json({ 
+      success: true, 
+      message: 'Statut mis à jour avec succès',
+      candidature: {
+        id: candidature.id,
+        nom: nomComplet,
+        email: email,
+        statut: statut,
+        poste: poste
+      }
+    });
+
   } catch (err) {
-    console.error('Erreur mise à jour statut:', err.message);
-    res.status(500).json({ error: 'Erreur serveur lors de la mise à jour.' });
+    console.error('❌ Erreur mise à jour statut:', err);
+    res.status(500).json({ 
+      error: 'Erreur serveur lors de la mise à jour.',
+      details: err.message 
+    });
+  } finally {
+    if (client) client.release();
   }
 });
 
-// 🔹 Supprimer une candidature
+// 🔹 Route de test pour les emails
+router.post('/test-email', async (req, res) => {
+  const { email, nom, statut, poste } = req.body;
+  
+  console.log('🧪 TEST EMAIL - Données reçues:', { email, nom, statut, poste });
+  
+  try {
+    await envoyerEmailCandidat(email, nom, statut, poste);
+    res.json({ success: true, message: 'Email de test envoyé avec succès' });
+  } catch (err) {
+    console.error('❌ Erreur test email:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 🔹 Supprimer une candidature - VERSION CORRIGÉE
-// 🔹 Supprimer une candidature - VERSION CORRIGÉE DANS routes/candidatures.js
-// 🔹 Supprimer une candidature - VERSION CORRIGÉE AVEC stage_spontane
-// 🔹 Supprimer une candidature - VERSION CORRIGÉE AVEC stage_spontane
 router.delete('/:type/:id', async (req, res) => {
   const { id, type } = req.params;
   
   console.log('🚀 DELETE /api/candidatures/:type/:id');
   console.log('📋 Paramètres reçus:', { id, type });
   
-  // CORRECTION : Ajouter stage_spontane dans le mapping
   const tableMap = { 
     emploi: 'candidatures_emploi', 
     stage: 'candidatures_emploi',
-    stage_spontane: 'candidatures_stage',  // ← AJOUT IMPORTANT
+    stage_spontane: 'candidatures_stage',
     pfe: 'candidatures_emploi',
     spontanee: 'candidatures_spontanees' 
   };
@@ -297,60 +509,6 @@ router.delete('/:type/:id', async (req, res) => {
   }
 });
 
-// 🔹 Envoi email candidat
-// 🔹 Envoi email candidat - version professionnelle sans emojis
-async function envoyerEmailCandidat(email, nom, statut, typePoste = 'poste') {
-  if (!email) return;
-  try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-    });
-
-    let sujet, html;
-
-    if (statut === 'acceptee') {
-      sujet = 'Votre candidature a été retenue';
-      html = `
-        <div style="font-family: Arial, sans-serif; color: #222; padding: 20px;">
-          <h2 style="color: #2e7d32;">Bonjour ${nom},</h2>
-          <p>Nous avons le plaisir de vous informer que votre candidature pour le poste de <b>${typePoste}</b> a été <b>acceptée</b>.</p>
-          <p>Notre équipe vous contactera prochainement afin de planifier un entretien ou finaliser la suite du processus.</p>
-          <p>Nous vous remercions pour votre confiance et l’intérêt que vous portez à <b>C4E Africa</b>.</p>
-          <br/>
-          <p>Cordialement,<br><b>L’équipe RH - C4E Africa</b></p>
-        </div>
-      `;
-    } else if (statut === 'refusee') {
-      sujet = 'Réponse à votre candidature';
-      html = `
-        <div style="font-family: Arial, sans-serif; color: #222; padding: 20px;">
-          <h2 style="color: #d32f2f;">Bonjour ${nom},</h2>
-          <p>Nous vous remercions d’avoir postulé pour le poste de <b>${typePoste}</b> chez <b>C4E Africa</b>.</p>
-          <p>Après étude de votre dossier, nous sommes au regret de vous informer que votre candidature n’a pas été retenue pour cette fois.</p>
-          <p>Nous vous encourageons toutefois à postuler à d’autres opportunités futures correspondant à votre profil.</p>
-          <br/>
-          <p>Cordialement,<br><b>L’équipe RH - C4E Africa</b></p>
-        </div>
-      `;
-    } else return;
-
-    await transporter.sendMail({
-      from: `"C4E Africa " <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: sujet,
-      html
-    });
-
-    console.log(`📧 Email envoyé à ${email} pour le statut "${statut}"`);
-  } catch (err) {
-    console.error('❌ Erreur envoi email:', err.message);
-  }
-}
-
-///////////
 // 🔹 Récupérer uniquement les candidatures de stage/PFE
 router.get('/stages', async (req, res) => {
   let client;
@@ -429,7 +587,7 @@ router.get('/spontanees/toutes', async (req, res) => {
     const stagesSpontanes = await safeQuery(
       client,
       `SELECT * FROM candidatures_stage ORDER BY date_soumission DESC`,
-      'stage_spontane'  // ← Type spécifique pour les distinguer
+      'stage_spontane'
     );
     candidatures.push(...stagesSpontanes);
 
@@ -445,6 +603,5 @@ router.get('/spontanees/toutes', async (req, res) => {
     if (client) client.release();
   }
 });
-
 
 module.exports = router;

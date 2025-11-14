@@ -4,13 +4,12 @@ const pool = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
-// POST /api/auth/login - VERSION ROBUSTE
+// POST /api/auth/login - VERSION CORRIGÉE
 router.post('/login', async (req, res) => {
-  const { email, motDePasse, type } = req.body;
+  const { email, motDePasse } = req.body; // On ne prend plus 'type' depuis le frontend
   
   console.log("🔐 Tentative de connexion:", { 
     email: email, 
-    type: type,
     hasPassword: !!motDePasse 
   });
 
@@ -26,14 +25,6 @@ router.post('/login', async (req, res) => {
     });
   }
 
-  // Détermination de la table
-  let table = 'gestionnaires'; // par défaut
-  if (type === 'admin' || type === 'administrateur') {
-    table = 'admin';
-  }
-  
-  console.log("📊 Table cible:", table);
-
   // Vérification JWT_SECRET
   if (!process.env.JWT_SECRET) {
     console.error('🚨 JWT_SECRET non défini !');
@@ -44,29 +35,52 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    // Recherche de l'utilisateur
-    console.log("🔍 Recherche utilisateur:", email);
-    const result = await pool.query(
+    // 🔄 RECHERCHE DANS LES DEUX TABLES (admin puis gestionnaires)
+    let user = null;
+    let table = null;
+
+    console.log("🔍 Recherche dans la table admin...");
+    const adminResult = await pool.query(
       `SELECT id, email, mot_de_passe, role, COALESCE(statut, 'actif') as statut 
-       FROM ${table} 
+       FROM admin 
        WHERE email = $1`,
       [email]
     );
 
-    if (result.rows.length === 0) {
-      console.log("❌ Utilisateur non trouvé:", email);
+    if (adminResult.rows.length > 0) {
+      user = adminResult.rows[0];
+      table = 'admin';
+      console.log("✅ Administrateur trouvé");
+    } else {
+      console.log("🔍 Recherche dans la table gestionnaires...");
+      const gestionnaireResult = await pool.query(
+        `SELECT id, email, mot_de_passe, role, COALESCE(statut, 'actif') as statut 
+         FROM gestionnaires 
+         WHERE email = $1`,
+        [email]
+      );
+
+      if (gestionnaireResult.rows.length > 0) {
+        user = gestionnaireResult.rows[0];
+        table = 'gestionnaires';
+        console.log("✅ Gestionnaire trouvé");
+      }
+    }
+
+    if (!user) {
+      console.log("❌ Utilisateur non trouvé dans aucune table:", email);
       return res.status(401).json({ 
         message: 'Email ou mot de passe incorrect.',
         code: 'UTILISATEUR_NON_TROUVE'
       });
     }
 
-    const user = result.rows[0];
     console.log("👤 Utilisateur trouvé:", { 
       id: user.id, 
       email: user.email, 
       role: user.role,
-      statut: user.statut 
+      statut: user.statut,
+      table: table
     });
 
     // Vérification du statut
@@ -102,13 +116,16 @@ router.post('/login', async (req, res) => {
       console.warn("⚠️ Erreur mise à jour dernière connexion:", updateErr.message);
     }
 
+    // Détermination du type pour le frontend
+    const userType = table === 'admin' ? 'administrateur' : 'gestionnaire';
+
     // Génération du token JWT
     console.log("🎫 Génération du token JWT...");
     const tokenPayload = {
       id: user.id,
       email: user.email,
       role: user.role,
-      type: table === 'admin' ? 'admin' : 'gestionnaire'
+      type: userType // 'administrateur' ou 'gestionnaire'
     };
 
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { 
@@ -116,19 +133,20 @@ router.post('/login', async (req, res) => {
     });
 
     console.log("✅ Connexion réussie pour:", user.email);
+    console.log("👤 Type d'utilisateur:", userType);
     console.log("🔑 Token généré - Expiration: 24h");
 
-    // Réponse réussie
+    // Réponse réussie - IMPORTANT: utiliser 'type' au lieu de 'userType' pour correspondre au frontend
     res.json({
       message: 'Connexion réussie',
+      token: token,
       user: {
         id: user.id,
         email: user.email,
         role: user.role,
-        type: table === 'admin' ? 'admin' : 'gestionnaire',
+        type: userType, // 'administrateur' ou 'gestionnaire'
         statut: user.statut
       },
-      token: token,
       expiresIn: '24h'
     });
 
@@ -142,7 +160,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// POST /api/auth/verify - Vérification de token
+// Les autres routes (verify et me) restent inchangées
 router.post('/verify', async (req, res) => {
   const { token } = req.body;
 
@@ -156,8 +174,8 @@ router.post('/verify', async (req, res) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Vérifier que l'utilisateur existe toujours
-    const table = decoded.type === 'admin' ? 'admin' : 'gestionnaires';
+    // Déterminer la table en fonction du type
+    const table = decoded.type === 'administrateur' ? 'admin' : 'gestionnaires';
     const userExists = await pool.query(
       `SELECT id, email, role, COALESCE(statut, 'actif') as statut 
        FROM ${table} 
@@ -216,7 +234,6 @@ router.post('/verify', async (req, res) => {
   }
 });
 
-// GET /api/auth/me - Récupération info utilisateur connecté
 router.get('/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   
@@ -231,7 +248,9 @@ router.get('/me', async (req, res) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const table = decoded.type === 'admin' ? 'admin' : 'gestionnaires';
+    
+    // Déterminer la table en fonction du type
+    const table = decoded.type === 'administrateur' ? 'admin' : 'gestionnaires';
     
     const userResult = await pool.query(
       `SELECT id, email, role, COALESCE(statut, 'actif') as statut, 
