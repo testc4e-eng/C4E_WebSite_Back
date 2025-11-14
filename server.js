@@ -28,7 +28,9 @@ const defaultOrigins = [
   'http://localhost:3000',
   'https://c4e-website-front.onrender.com',
   'https://www.c4e-africa.com',
-  'https://c4e-africa.com'
+  'https://c4e-africa.com', // ← AJOUTEZ CETTE LIGNE
+  'https://www.cdc-africa.com',
+  'https://cdc-africa.com'
 ];
 
 const allowedOrigins = envOrigins.length ? envOrigins : defaultOrigins;
