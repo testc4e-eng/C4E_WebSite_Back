@@ -1,4 +1,4 @@
-// server.js
+// server.js - VERSION CORRIGÉE
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -13,10 +13,8 @@ const pool = require('./db');
 const app = express();
 
 /* ----------------------------
-   CORS (depuis ENV + fallback)
+   CORS CORRIGÉ
    ---------------------------- */
-// ALLOWED_ORIGINS est une liste séparée par des virgules, ex :
-// ALLOWED_ORIGINS="http://localhost:5173,https://c4e-website-front.onrender.com,https://www.c4e-africa.com"
 const envOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map(s => s.trim())
@@ -28,7 +26,7 @@ const defaultOrigins = [
   'http://localhost:3000',
   'https://c4e-website-front.onrender.com',
   'https://www.c4e-africa.com',
-  'https://c4e-africa.com', // ← AJOUTEZ CETTE LIGNE
+  'https://c4e-africa.com',
   'https://www.cdc-africa.com',
   'https://cdc-africa.com'
 ];
@@ -38,32 +36,66 @@ console.log('✅ Allowed origins:', allowedOrigins);
 
 app.set('trust proxy', 1);
 
-app.use(cors({
+// CORRECTION CORS - Configuration améliorée
+const corsOptions = {
   origin: function (origin, callback) {
-    // autoriser toutes les requêtes sans origin (curl, Render, etc.)
+    // Autoriser les requêtes sans origin (curl, Postman, etc.)
     if (!origin) return callback(null, true);
+    
+    // Vérifier si l'origine est dans la liste autorisée
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-
-    console.log('CORS blocked:', origin);
+    console.log('🚫 CORS blocked:', origin);
     return callback(new Error('CORS: Origin non autorisée'));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true // si tu utilises cookies / JWT
-}));
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
 
-app.options('*', cors()); // preflight
+app.use(cors(corsOptions));
+
+// Gestion explicite des preflight OPTIONS pour toutes les routes
+app.options('*', cors(corsOptions));
+
 app.use(express.json({ limit: '10mb' }));
 
 /* ----------------------------
-   Routes avant les autres middleware
+   MIDDLEWARE CORS SPÉCIFIQUE POUR /contact
+   ---------------------------- */
+app.use('/contact', (req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Répondre directement aux preflight OPTIONS
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+
+/* ----------------------------
+   Routes
    ---------------------------- */
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
+const contactRoutes = require('./routes/contact');
+const candidaturesRoutes = require('./routes/candidatures');
+const offresRoutes = require('./routes/offres');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/contact', contactRoutes);
+app.use('/api/candidatures', candidaturesRoutes);
+app.use('/api/offres', offresRoutes);
 
 /* ----------------------------
    UPLOADS (PDF seulement)
@@ -88,21 +120,18 @@ const upload = multer({
 app.use('/uploads', express.static(uploadDir));
 
 /* ----------------------------
-   ROUTES TIERS
-   ---------------------------- */
-const contactRoutes = require('./routes/contact');
-const candidaturesRoutes = require('./routes/candidatures');
-const offresRoutes = require('./routes/offres');
-
-app.use('/contact', contactRoutes);
-app.use('/api/candidatures', candidaturesRoutes);
-app.use('/api/offres', offresRoutes);
-
-/* ----------------------------
    ENDPOINTS SANTÉ / DIAGNOSTIC
    ---------------------------- */
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'OK', message: 'Serveur fonctionne correctement', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    message: 'Serveur fonctionne correctement', 
+    timestamp: new Date().toISOString(),
+    cors: {
+      allowedOrigins: allowedOrigins,
+      clientOrigin: _req.headers.origin || 'none'
+    }
+  });
 });
 
 app.get('/api/db/ping', async (_req, res) => {
@@ -113,6 +142,15 @@ app.get('/api/db/ping', async (_req, res) => {
     console.error('db/ping error:', e);
     res.status(500).json({ ok: false, error: String(e) });
   }
+});
+
+// Endpoint de test CORS spécifique
+app.get('/api/cors-test', (_req, res) => {
+  res.json({ 
+    message: 'CORS test réussi!',
+    yourOrigin: _req.headers.origin,
+    timestamp: new Date().toISOString()
+  });
 });
 
 /* ----------------------------
@@ -298,7 +336,7 @@ app.get('/api/candidatures_emploi/stages', async (_req, res) => {
 });
 
 /* ----------------------------
-   HANDLERS D’ERREURS (APRÈS routes)
+   HANDLERS D'ERREURS (APRÈS routes)
    ---------------------------- */
 app.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError) {
@@ -307,8 +345,26 @@ app.use((err, _req, res, _next) => {
   if (err && err.message && err.message.includes('fichier')) {
     return res.status(400).json({ message: err.message });
   }
+  
+  // Gestion spécifique des erreurs CORS
+  if (err.message && err.message.includes('CORS')) {
+    return res.status(403).json({ 
+      message: 'Accès interdit par la politique CORS',
+      error: err.message 
+    });
+  }
+  
   console.error('Unhandled error:', err);
   res.status(500).json({ message: 'Erreur serveur.' });
+});
+
+// Route 404
+app.use('*', (req, res) => {
+  res.status(404).json({ 
+    message: 'Route non trouvée',
+    path: req.originalUrl,
+    method: req.method
+  });
 });
 
 /* ----------------------------
@@ -316,7 +372,7 @@ app.use((err, _req, res, _next) => {
    ---------------------------- */
 const PORT = process.env.PORT;
 if (!PORT) {
-  console.error('🚨 ERROR: La variable d\'environnement PORT n\'est pas définie. Render fournit automatiquement ce port.');
+  console.error('🚨 ERROR: La variable d\'environnement PORT n\'est pas définie.');
   process.exit(1);
 }
 
@@ -325,4 +381,6 @@ app.listen(PORT, () => {
   console.log(`📁 UPLOAD_DIR = ${uploadDir}`);
   console.log(`🌐 Health:        /api/health`);
   console.log(`🗄️  DB ping:      /api/db/ping`);
+  console.log(`🔄 CORS test:     /api/cors-test`);
+  console.log(`📧 Contact:       /contact`);
 });
