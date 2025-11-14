@@ -25,6 +25,7 @@ const envOrigins = (process.env.ALLOWED_ORIGINS || '')
 const defaultOrigins = [
   'http://localhost:5173',
   'http://localhost:8080',
+  'http://localhost:3000',
   'https://c4e-website-front.onrender.com',
   'https://www.c4e-africa.com',
   'https://c4e-africa.com'
