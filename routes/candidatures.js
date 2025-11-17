@@ -214,77 +214,78 @@ async function envoyerEmailCandidat(email, nom, statut, typePoste = 'poste') {
 
     let sujet, html;
 
-    if (statut === 'acceptee') {
-      sujet = 'Félicitations ! Votre candidature a été retenue - C4E Africa';
-      html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #2e7d32; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background: #f9f9f9; }
-            .footer { padding: 20px; text-align: center; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>C4E Africa</h1>
-            </div>
-            <div class="content">
-              <h2>Bonjour ${nom},</h2>
-              <p>Nous avons le plaisir de vous informer que votre candidature pour <strong>${typePoste}</strong> a été <strong style="color: #2e7d32;">acceptée</strong>.</p>
-              <p>Notre équipe RH vous contactera dans les plus brefs délais pour planifier un entretien et finaliser les prochaines étapes.</p>
-              <p>Nous vous remercions pour l'intérêt que vous portez à C4E Africa et nous réjouissons de vous rencontrer.</p>
-            </div>
-            <div class="footer">
-              <p>Cordialement,<br><strong>L'équipe des Ressources Humaines</strong><br>C4E Africa</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
-    } else if (statut === 'refusee') {
-      sujet = 'Réponse à votre candidature - C4E Africa';
-      html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #d32f2f; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background: #f9f9f9; }
-            .footer { padding: 20px; text-align: center; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>C4E Africa</h1>
-            </div>
-            <div class="content">
-              <h2>Bonjour ${nom},</h2>
-              <p>Nous vous remercions d'avoir postulé pour le poste de <strong>${typePoste}</strong> chez <strong>C4E Africa</strong>.</p>
-              <p>Après une étude attentive de votre profil, nous sommes au regret de vous informer que votre candidature n'a pas été retenue pour cette opportunité.</p>
-              <p>Nous conservons votre CV dans notre base de données et ne manquerons pas de vous recontacter pour des postes correspondant davantage à votre profil.</p>
-              <p>Nous vous souhaitons plein de succès dans vos recherches futures.</p>
-            </div>
-            <div class="footer">
-              <p>Cordialement,<br><strong>L'équipe des Ressources Humaines</strong><br>C4E Africa</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
-    } else {
-      console.log('⚠️  Statut non géré pour envoi email:', statut);
-      return;
-    }
+if (statut === 'acceptee') {
+  sujet = 'Félicitations ! Votre candidature a été retenue - C4E Africa';
+  html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #2e7d32; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .footer { padding: 20px; text-align: center; color: #666; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>C4E Africa</h1>
+        </div>
+        <div class="content">
+          <h2>Bonjour ${nom},</h2>
+          <p>Nous avons le plaisir de vous informer que votre candidature pour le poste de <strong>${typePoste}</strong> a été <strong style="color: #2e7d32;">acceptée</strong>.</p>
+          <p>Notre équipe RH vous contactera très prochainement afin de planifier un entretien et finaliser les prochaines étapes du processus.</p>
+          <p>Nous vous remercions pour l'intérêt que vous portez à <strong>C4E Africa</strong> et nous avons hâte d'échanger avec vous.</p>
+        </div>
+        <div class="footer">
+          <p>Cordialement,<br><strong>L'équipe des Ressources Humaines</strong><br>C4E Africa</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+} else if (statut === 'refusee') {
+  sujet = 'Réponse à votre candidature - C4E Africa';
+  html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #d32f2f; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .footer { padding: 20px; text-align: center; color: #666; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>C4E Africa</h1>
+        </div>
+        <div class="content">
+          <h2>Bonjour ${nom},</h2>
+          <p>Nous vous remercions vivement d'avoir postulé pour le poste de <strong>${typePoste}</strong> au sein de <strong>C4E Africa</strong>.</p>
+          <p>Votre profil présente de très bonnes compétences, mais après une analyse approfondie des candidatures, nous avons décidé de retenir un profil correspondant davantage aux exigences immédiates du poste.</p>
+          <p>Nous conserverons néanmoins votre CV et n’hésiterons pas à revenir vers vous si une opportunité plus adaptée à votre parcours se présente.</p>
+          <p>Nous vous souhaitons sincèrement beaucoup de réussite dans vos futurs projets professionnels.</p>
+        </div>
+        <div class="footer">
+          <p>Cordialement,<br><strong>L'équipe des Ressources Humaines</strong><br>C4E Africa</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+} else {
+  console.log('⚠️  Statut non géré pour envoi email:', statut);
+  return;
+}
+
 
     // Envoyer l'email
     const info = await transporter.sendMail({
