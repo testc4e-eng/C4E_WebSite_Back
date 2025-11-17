@@ -290,4 +290,75 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// 📂 routes/auth.js - AJOUTER CETTE ROUTE
+router.put("/change-password", verifyToken, async (req, res) => {
+  try {
+    console.log("🔄 Changement de mot de passe utilisateur");
+    
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+
+    // Validation
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ 
+        message: "Le mot de passe actuel et le nouveau mot de passe sont requis" 
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        message: "Le nouveau mot de passe doit contenir au moins 6 caractères" 
+      });
+    }
+
+    // Récupérer l'utilisateur
+    const userResult = await pool.query(
+      `SELECT id, email, mot_de_passe FROM utilisateurs WHERE id = $1`,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ 
+        message: "Utilisateur non trouvé" 
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Vérifier le mot de passe actuel
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.mot_de_passe);
+    if (!isCurrentPasswordValid) {
+      return res.status(400).json({ 
+        message: "Le mot de passe actuel est incorrect" 
+      });
+    }
+
+    // Hashage du nouveau mot de passe
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+    // Mise à jour en base
+    await pool.query(
+      `UPDATE utilisateurs 
+       SET mot_de_passe = $1, date_modification = NOW() 
+       WHERE id = $2`,
+      [hashedNewPassword, userId]
+    );
+
+    console.log("✅ Mot de passe utilisateur mis à jour avec succès");
+
+    res.json({ 
+      message: "Mot de passe mis à jour avec succès",
+      success: true
+    });
+
+  } catch (err) {
+    console.error("❌ ERREUR CHANGE PASSWORD:", err);
+    
+    res.status(500).json({ 
+      message: "Erreur serveur lors du changement de mot de passe",
+      error: err.message 
+    });
+  }
+});
+
 module.exports = router;
