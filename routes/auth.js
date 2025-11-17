@@ -317,60 +317,106 @@ router.get('/me', async (req, res) => {
 });
 
 // 📂 routes/auth.js - AJOUTER CETTE ROUTE
+// 📂 routes/auth.js - ROUTE CHANGE-PASSWORD AMÉLIORÉE
 router.put("/change-password", verifyToken, async (req, res) => {
   try {
-    console.log("🔄 Changement de mot de passe utilisateur");
+    console.log("🔄 REQUÊTE CHANGE-PASSWORD REÇUE:");
+    console.log("📦 Headers:", req.headers);
+    console.log("📦 Body:", req.body);
+    console.log("👤 User from token:", req.user);
     
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
     const userId = req.user.id;
 
-    // Validation
-    if (!currentPassword || !newPassword) {
+    // Validation détaillée
+    console.log("🔍 Validation des champs...");
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      console.log("❌ Champs manquants:", {
+        currentPassword: !!currentPassword,
+        newPassword: !!newPassword,
+        confirmPassword: !!confirmPassword
+      });
       return res.status(400).json({ 
-        message: "Le mot de passe actuel et le nouveau mot de passe sont requis" 
+        message: "Tous les champs sont requis" 
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      console.log("❌ Mots de passe ne correspondent pas");
+      return res.status(400).json({ 
+        message: "Les nouveaux mots de passe ne correspondent pas" 
       });
     }
 
     if (newPassword.length < 6) {
+      console.log("❌ Mot de passe trop court:", newPassword.length);
       return res.status(400).json({ 
         message: "Le nouveau mot de passe doit contenir au moins 6 caractères" 
       });
     }
 
-    // Récupérer l'utilisateur
+    console.log("🔍 Récupération de l'utilisateur ID:", userId);
+    
+    // Récupérer l'utilisateur avec plus d'infos pour debug
     const userResult = await pool.query(
-      `SELECT id, email, mot_de_passe FROM utilisateurs WHERE id = $1`,
+      `SELECT id, email, mot_de_passe, nom, role, type FROM utilisateurs WHERE id = $1`,
       [userId]
     );
 
+    console.log("📊 Résultat query utilisateur:", {
+      rowsCount: userResult.rows.length,
+      userFound: userResult.rows[0] ? {
+        id: userResult.rows[0].id,
+        email: userResult.rows[0].email,
+        hasPassword: !!userResult.rows[0].mot_de_passe
+      } : 'Aucun utilisateur'
+    });
+
     if (userResult.rows.length === 0) {
+      console.log("❌ Utilisateur non trouvé pour ID:", userId);
       return res.status(404).json({ 
         message: "Utilisateur non trouvé" 
       });
     }
 
     const user = userResult.rows[0];
+    console.log("👤 Utilisateur trouvé:", user.email);
 
     // Vérifier le mot de passe actuel
+    console.log("🔐 Vérification mot de passe actuel...");
     const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.mot_de_passe);
+    
+    console.log("📊 Résultat vérification mot de passe:", {
+      providedPassword: currentPassword ? '***' : 'manquant',
+      storedPasswordHash: user.mot_de_passe ? '***' : 'manquant',
+      isValid: isCurrentPasswordValid
+    });
+
     if (!isCurrentPasswordValid) {
+      console.log("❌ Mot de passe actuel incorrect");
       return res.status(400).json({ 
         message: "Le mot de passe actuel est incorrect" 
       });
     }
 
     // Hashage du nouveau mot de passe
+    console.log("🔐 Hashage du nouveau mot de passe...");
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
     // Mise à jour en base
-    await pool.query(
+    console.log("💾 Mise à jour en base...");
+    const updateResult = await pool.query(
       `UPDATE utilisateurs 
        SET mot_de_passe = $1, date_modification = NOW() 
-       WHERE id = $2`,
+       WHERE id = $2
+       RETURNING id, email, date_modification`,
       [hashedNewPassword, userId]
     );
 
-    console.log("✅ Mot de passe utilisateur mis à jour avec succès");
+    console.log("✅ Mise à jour réussie:", {
+      rowsUpdated: updateResult.rowCount,
+      userUpdated: updateResult.rows[0]
+    });
 
     res.json({ 
       message: "Mot de passe mis à jour avec succès",
@@ -378,11 +424,21 @@ router.put("/change-password", verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ ERREUR CHANGE PASSWORD:", err);
+    console.error("❌ ERREUR CHANGE PASSWORD DÉTAILLÉE:");
+    console.error("💥 Error name:", err.name);
+    console.error("💥 Error message:", err.message);
+    console.error("💥 Error stack:", err.stack);
+    console.error("💥 Error code:", err.code);
+    
+    // Erreur de base de données
+    if (err.code) {
+      console.error("🗄️ Code erreur DB:", err.code);
+    }
     
     res.status(500).json({ 
       message: "Erreur serveur lors du changement de mot de passe",
-      error: err.message 
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Erreur interne',
+      code: err.code
     });
   }
 });
