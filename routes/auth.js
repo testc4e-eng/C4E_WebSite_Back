@@ -4,6 +4,32 @@ const pool = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
+// Middleware verifyToken manquant - AJOUTÉ
+const verifyToken = (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: "Token manquant" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    req.user = decoded;
+    next();
+  } catch (err) {
+    console.error("Middleware verifyToken error:", err.message);
+    
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token expiré" });
+    } else if (err.name === "JsonWebTokenError") {
+      return res.status(401).json({ message: "Token invalide" });
+    } else {
+      return res.status(401).json({ message: "Erreur d'authentification" });
+    }
+  }
+};
+
 // POST /api/auth/login - VERSION TABLE UNIFIÉE
 router.post('/login', async (req, res) => {
   // AJOUT: Log complet de la requête
