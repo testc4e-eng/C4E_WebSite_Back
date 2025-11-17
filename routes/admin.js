@@ -153,5 +153,73 @@ router.delete("/:type/:id", verifyAdmin, async (req, res) => {
     res.status(500).json({ message: "Erreur lors de la suppression" });
   }
 });
+router.put("/:type/:id/password", verifyAdmin, async (req, res) => {
+  try {
+    console.log("🔄 PUT reçu - Mise à jour mot de passe");
+    console.log("📦 Body reçu:", req.body);
+    
+    const { type, id } = req.params;
+    const { nouveauMotDePasse, confirmationMotDePasse } = req.body;
+    
+    // Validation des données
+    if (!nouveauMotDePasse || !confirmationMotDePasse) {
+      return res.status(400).json({ 
+        message: "Le nouveau mot de passe et la confirmation sont requis" 
+      });
+    }
+    
+    if (nouveauMotDePasse !== confirmationMotDePasse) {
+      return res.status(400).json({ 
+        message: "Les mots de passe ne correspondent pas" 
+      });
+    }
+    
+    if (nouveauMotDePasse.length < 6) {
+      return res.status(400).json({ 
+        message: "Le mot de passe doit contenir au moins 6 caractères" 
+      });
+    }
+    
+    // Vérifier que l'utilisateur existe
+    const userCheck = await pool.query(
+      `SELECT id, email FROM utilisateurs WHERE id = $1 AND type = $2`,
+      [id, type === "administrateurs" ? "administrateur" : "gestionnaire"]
+    );
+    
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ 
+        message: "Utilisateur non trouvé" 
+      });
+    }
+    
+    console.log("🔐 Hashage du nouveau mot de passe...");
+    // Hashage du nouveau mot de passe
+    const hashedPassword = await bcrypt.hash(nouveauMotDePasse, 10);
+    
+    console.log("💾 Mise à jour en base...");
+    // Mise à jour du mot de passe
+    await pool.query(
+      `UPDATE utilisateurs 
+       SET mot_de_passe = $1, date_modification = NOW() 
+       WHERE id = $2`,
+      [hashedPassword, id]
+    );
+    
+    console.log("✅ Mot de passe mis à jour avec succès");
+    
+    res.json({ 
+      message: "Mot de passe mis à jour avec succès",
+      success: true
+    });
+    
+  } catch (err) {
+    console.error("❌ ERREUR UPDATE PASSWORD:", err);
+    
+    res.status(500).json({ 
+      message: "Erreur serveur lors de la mise à jour du mot de passe",
+      error: err.message 
+    });
+  }
+});
 
 module.exports = router;
