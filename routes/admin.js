@@ -34,51 +34,83 @@ const verifyAdmin = (req, res, next) => {
 // CREATE utilisateur - VERSION TABLE UNIFIÉE
 // 📂 routes/admin.js - CORRECTION DE LA ROUTE CREATE
 // 📂 routes/admin.js - VERSION AVEC DEBUG COMPLET
+// 📂 routes/admin.js - VERSION DÉBOGAGE ULTIME
 router.post("/:type", verifyAdmin, async (req, res) => {
+  let client;
   try {
-    console.log("=== DÉBUT CRÉATION UTILISATEUR ===");
-    console.log("📥 POST reçu - Type:", req.params.type);
-    console.log("📦 Body reçu:", JSON.stringify(req.body, null, 2));
+    console.log("=== 🚨 DÉBUT CRÉATION UTILISATEUR 🚨 ===");
+    console.log("📥 Headers:", req.headers);
+    console.log("📦 Body COMPLET:", req.body);
+    console.log("🔍 Type demandé:", req.params.type);
     
+    // Vérifier que le body est bien parsé
+    if (!req.body) {
+      console.log("❌ Body vide ou non parsé");
+      return res.status(400).json({ message: "Données manquantes" });
+    }
+
     const { email, motDePasse, nom } = req.body;
     
-    // Validation détaillée
-    if (!email) {
-      console.log("❌ Email manquant");
-      return res.status(400).json({ message: "Email requis" });
-    }
-    if (!motDePasse) {
-      console.log("❌ Mot de passe manquant");
-      return res.status(400).json({ message: "Mot de passe requis" });
+    console.log("📋 Données extraites:", { email, motDePasse: motDePasse ? "***" : "MANQUANT", nom });
+
+    // Validation basique
+    if (!email || !motDePasse) {
+      console.log("❌ Champs manquants - email:", !!email, "motDePasse:", !!motDePasse);
+      return res.status(400).json({ 
+        message: "Email et mot de passe requis",
+        received: { email: !!email, motDePasse: !!motDePasse, nom: !!nom }
+      });
     }
 
-    console.log("🔍 Validation de l'email...");
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      console.log("❌ Format email invalide:", email);
-      return res.status(400).json({ message: "Format d'email invalide" });
+    // Tester la connexion à la base FIRST
+    console.log("🔌 Test connexion base de données...");
+    client = await pool.connect();
+    console.log("✅ Connexion BD OK");
+
+    // Vérifier si la table existe
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'utilisateurs'
+      );
+    `);
+    console.log("📊 Table utilisateurs existe:", tableCheck.rows[0].exists);
+
+    if (!tableCheck.rows[0].exists) {
+      throw new Error("Table 'utilisateurs' n'existe pas");
     }
 
-    // Déterminer le type d'utilisateur
-    const userType = req.params.type === "administrateurs" ? "administrateur" : "gestionnaire";
-    const role = req.params.type === "administrateurs" ? "admin" : "gestionnaire";
-    
-    console.log("🎯 Type utilisateur:", userType, "Role:", role);
-    
-    console.log("🔍 Vérification email dans la base...");
-    // Vérifier si l'email existe déjà
-    const exist = await pool.query(`SELECT id FROM utilisateurs WHERE email = $1`, [email]);
+    // Vérifier la structure de la table
+    const structure = await client.query(`
+      SELECT column_name, data_type, is_nullable 
+      FROM information_schema.columns 
+      WHERE table_name = 'utilisateurs'
+      ORDER BY ordinal_position;
+    `);
+    console.log("🏗️ Structure table:", structure.rows);
+
+    // Vérifier email unique
+    console.log("🔎 Vérification email unique...");
+    const exist = await client.query(`SELECT id FROM utilisateurs WHERE email = $1`, [email]);
+    console.log("📧 Email existe déjà:", exist.rows.length > 0);
+
     if (exist.rows.length > 0) {
-      console.log("❌ Email déjà utilisé:", email);
       return res.status(409).json({ message: "Email déjà utilisé" });
     }
 
+    // Hashage mot de passe
     console.log("🔐 Hashage mot de passe...");
-    // Hashage du mot de passe
     const hashedPassword = await bcrypt.hash(motDePasse, 10);
     console.log("✅ Mot de passe hashé");
 
-    console.log("💾 Préparation insertion en base...");
+    // Déterminer type et rôle
+    const userType = req.params.type === "administrateurs" ? "administrateur" : "gestionnaire";
+    const role = req.params.type === "administrateurs" ? "admin" : "gestionnaire";
+    
+    console.log("🎯 Type final:", userType, "Rôle:", role);
+
+    // Insertion
+    console.log("💾 Insertion en cours...");
     const query = `
       INSERT INTO utilisateurs (nom, email, mot_de_passe, role, type, statut, date_creation) 
       VALUES ($1, $2, $3, $4, $5, 'actif', NOW()) 
@@ -89,45 +121,41 @@ router.post("/:type", verifyAdmin, async (req, res) => {
     console.log("📝 Query:", query);
     console.log("🎯 Values:", values);
 
-    console.log("🚀 Exécution de la requête...");
-    const result = await pool.query(query, values);
+    const result = await client.query(query, values);
     console.log("✅ Insertion réussie:", result.rows[0]);
 
-    console.log("=== FIN CRÉATION UTILISATEUR ===");
+    console.log("=== 🎉 CRÉATION RÉUSSIE 🎉 ===");
     
     res.status(201).json({ 
-      message: `${userType === "administrateur" ? "Administrateur" : "Gestionnaire"} créé avec succès`,
+      message: "Utilisateur créé avec succès",
       success: true,
       user: result.rows[0]
     });
     
   } catch (err) {
-    console.error("❌ ERREUR CRITIQUE DANS CREATE:");
+    console.error("❌ 🚨 ERREUR CRITIQUE 🚨");
     console.error("🔴 Message:", err.message);
     console.error("🔴 Code:", err.code);
     console.error("🔴 Stack:", err.stack);
-    console.error("🔴 Detail:", err.detail);
     
-    let errorMessage = "Erreur serveur lors de la création";
-    let statusCode = 500;
-    
-    if (err.code === '23505') {
-      errorMessage = "Cet email est déjà utilisé";
-      statusCode = 409;
-    } else if (err.code === '23502') {
-      errorMessage = "Données manquantes requises";
-      statusCode = 400;
-    } else if (err.code === '22P02') {
-      errorMessage = "Format de données invalide";
-      statusCode = 400;
-    }
-    
-    res.status(statusCode).json({ 
-      message: errorMessage,
+    // Erreur détaillée
+    const errorResponse = {
+      message: "Erreur lors de la création",
       error: err.message,
       code: err.code,
-      detail: err.detail
-    });
+      detail: err.detail,
+      routine: err.routine
+    };
+    
+    console.error("📤 Réponse d'erreur:", errorResponse);
+    
+    res.status(500).json(errorResponse);
+    
+  } finally {
+    if (client) {
+      client.release();
+      console.log("🔌 Connexion BD libérée");
+    }
   }
 });
 
