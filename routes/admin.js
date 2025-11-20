@@ -33,22 +33,29 @@ const verifyAdmin = (req, res, next) => {
 
 // CREATE utilisateur - VERSION TABLE UNIFIÉE
 // 📂 routes/admin.js - CORRECTION DE LA ROUTE CREATE
+// 📂 routes/admin.js - VERSION AVEC DEBUG COMPLET
 router.post("/:type", verifyAdmin, async (req, res) => {
   try {
+    console.log("=== DÉBUT CRÉATION UTILISATEUR ===");
     console.log("📥 POST reçu - Type:", req.params.type);
-    console.log("📦 Body reçu:", req.body);
+    console.log("📦 Body reçu:", JSON.stringify(req.body, null, 2));
     
     const { email, motDePasse, nom } = req.body;
     
-    // Validation améliorée
-    if (!email || !motDePasse) {
-      console.log("❌ Validation failed: email or password missing");
-      return res.status(400).json({ message: "Email et mot de passe requis" });
+    // Validation détaillée
+    if (!email) {
+      console.log("❌ Email manquant");
+      return res.status(400).json({ message: "Email requis" });
+    }
+    if (!motDePasse) {
+      console.log("❌ Mot de passe manquant");
+      return res.status(400).json({ message: "Mot de passe requis" });
     }
 
-    // Validation de l'email
+    console.log("🔍 Validation de l'email...");
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
+      console.log("❌ Format email invalide:", email);
       return res.status(400).json({ message: "Format d'email invalide" });
     }
 
@@ -56,8 +63,9 @@ router.post("/:type", verifyAdmin, async (req, res) => {
     const userType = req.params.type === "administrateurs" ? "administrateur" : "gestionnaire";
     const role = req.params.type === "administrateurs" ? "admin" : "gestionnaire";
     
-    console.log("🔍 Vérification email pour:", email);
+    console.log("🎯 Type utilisateur:", userType, "Role:", role);
     
+    console.log("🔍 Vérification email dans la base...");
     // Vérifier si l'email existe déjà
     const exist = await pool.query(`SELECT id FROM utilisateurs WHERE email = $1`, [email]);
     if (exist.rows.length > 0) {
@@ -68,17 +76,24 @@ router.post("/:type", verifyAdmin, async (req, res) => {
     console.log("🔐 Hashage mot de passe...");
     // Hashage du mot de passe
     const hashedPassword = await bcrypt.hash(motDePasse, 10);
+    console.log("✅ Mot de passe hashé");
 
-    console.log("💾 Insertion en base...");
-    // Insertion dans la table unifiée utilisateurs
-    const result = await pool.query(
-      `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, type, statut, date_creation) 
-       VALUES ($1, $2, $3, $4, $5, 'actif', NOW()) 
-       RETURNING id, nom, email, role, type, date_creation, statut`,
-      [nom || 'Utilisateur', email, hashedPassword, role, userType]
-    );
+    console.log("💾 Préparation insertion en base...");
+    const query = `
+      INSERT INTO utilisateurs (nom, email, mot_de_passe, role, type, statut, date_creation) 
+      VALUES ($1, $2, $3, $4, $5, 'actif', NOW()) 
+      RETURNING id, nom, email, role, type, date_creation, statut
+    `;
+    const values = [nom || 'Utilisateur', email, hashedPassword, role, userType];
+    
+    console.log("📝 Query:", query);
+    console.log("🎯 Values:", values);
 
-    console.log("✅ Utilisateur créé avec succès:", result.rows[0]);
+    console.log("🚀 Exécution de la requête...");
+    const result = await pool.query(query, values);
+    console.log("✅ Insertion réussie:", result.rows[0]);
+
+    console.log("=== FIN CRÉATION UTILISATEUR ===");
     
     res.status(201).json({ 
       message: `${userType === "administrateur" ? "Administrateur" : "Gestionnaire"} créé avec succès`,
@@ -87,21 +102,31 @@ router.post("/:type", verifyAdmin, async (req, res) => {
     });
     
   } catch (err) {
-    console.error("❌ ERREUR CREATE:", err);
-    console.error("❌ Stack trace:", err.stack);
+    console.error("❌ ERREUR CRITIQUE DANS CREATE:");
+    console.error("🔴 Message:", err.message);
+    console.error("🔴 Code:", err.code);
+    console.error("🔴 Stack:", err.stack);
+    console.error("🔴 Detail:", err.detail);
     
-    // Erreur plus spécifique
     let errorMessage = "Erreur serveur lors de la création";
-    if (err.code === '23505') { // Violation de contrainte unique
+    let statusCode = 500;
+    
+    if (err.code === '23505') {
       errorMessage = "Cet email est déjà utilisé";
-    } else if (err.code === '23502') { // Violation de contrainte NOT NULL
+      statusCode = 409;
+    } else if (err.code === '23502') {
       errorMessage = "Données manquantes requises";
+      statusCode = 400;
+    } else if (err.code === '22P02') {
+      errorMessage = "Format de données invalide";
+      statusCode = 400;
     }
     
-    res.status(500).json({ 
+    res.status(statusCode).json({ 
       message: errorMessage,
       error: err.message,
-      code: err.code
+      code: err.code,
+      detail: err.detail
     });
   }
 });
