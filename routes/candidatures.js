@@ -605,4 +605,87 @@ router.get('/spontanees/toutes', async (req, res) => {
   }
 });
 
+// 🔹 Route spécifique pour stage_spontane
+router.put('/statut/stage_spontane/:id', async (req, res) => {
+  const { id } = req.params;
+  const { statut } = req.body;
+  
+  console.log('🚀 MISE À JOUR STATUT STAGE_SPONTANE - Données reçues:');
+  console.log('   ID:', id);
+  console.log('   Statut:', statut);
+
+  const validStatuts = ['en_attente', 'acceptee', 'refusee'];
+  if (!validStatuts.includes(statut)) {
+    console.error('❌ Statut invalide:', statut);
+    return res.status(400).json({ error: 'Statut invalide.' });
+  }
+
+  let client;
+  try {
+    client = await pool.connect();
+    
+    console.log(`🔍 Recherche dans la table: candidatures_stage, ID: ${id}`);
+
+    // Récupérer les infos complètes de la candidature
+    const selectQuery = `SELECT * FROM candidatures_stage WHERE id = $1`;
+    const selectResult = await client.query(selectQuery, [id]);
+    
+    if (selectResult.rows.length === 0) {
+      console.error('❌ Candidature stage_spontane introuvable');
+      return res.status(404).json({ error: 'Candidature introuvable.' });
+    }
+
+    const candidature = selectResult.rows[0];
+    console.log('✅ Candidature stage_spontane trouvée:', {
+      id: candidature.id,
+      nom: candidature.nom,
+      prenom: candidature.prenom,
+      email: candidature.email,
+      domaine: candidature.domaine
+    });
+
+    // Mettre à jour le statut
+    const updateQuery = `UPDATE candidatures_stage SET statut = $1 WHERE id = $2 RETURNING *`;
+    const updateResult = await client.query(updateQuery, [statut, id]);
+    
+    console.log('✅ Statut stage_spontane mis à jour en base de données');
+
+    // Préparer l'envoi de l'email
+    const nomComplet = `${candidature.nom || ''} ${candidature.prenom || ''}`.trim();
+    const email = candidature.email;
+    const poste = candidature.domaine || 'stage';
+
+    console.log(`📧 Préparation envoi email à: ${email}`);
+    console.log(`   Nom: ${nomComplet}`);
+    console.log(`   Poste: ${poste}`);
+    console.log(`   Statut: ${statut}`);
+
+    // Envoyer l'email (ne pas attendre pour répondre au client)
+    envoyerEmailCandidat(email, nomComplet, statut, poste)
+      .then(() => console.log('✅ Email envoyé avec succès'))
+      .catch(err => console.error('❌ Erreur envoi email:', err));
+
+    res.json({ 
+      success: true, 
+      message: 'Statut mis à jour avec succès',
+      candidature: {
+        id: candidature.id,
+        nom: nomComplet,
+        email: email,
+        statut: statut,
+        poste: poste
+      }
+    });
+
+  } catch (err) {
+    console.error('❌ Erreur mise à jour statut stage_spontane:', err);
+    res.status(500).json({ 
+      error: 'Erreur serveur lors de la mise à jour.',
+      details: err.message 
+    });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 module.exports = router;
