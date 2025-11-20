@@ -221,5 +221,59 @@ router.put("/:type/:id/password", verifyAdmin, async (req, res) => {
     });
   }
 });
+router.put("/:type/:id/status", verifyAdmin, async (req, res) => {
+  try {
+    console.log("🔄 PUT reçu - Changement de statut");
+    console.log("📦 Body reçu:", req.body);
+    
+    const { type, id } = req.params;
+    const { statut } = req.body;
+    
+    // Validation
+    if (!statut || !["actif", "inactif"].includes(statut)) {
+      return res.status(400).json({ 
+        message: "Statut invalide. Doit être 'actif' ou 'inactif'" 
+      });
+    }
+    
+    // Vérifier que l'utilisateur existe
+    const userCheck = await pool.query(
+      `SELECT id, email FROM utilisateurs WHERE id = $1 AND type = $2`,
+      [id, type === "administrateurs" ? "administrateur" : "gestionnaire"]
+    );
+    
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ 
+        message: "Utilisateur non trouvé" 
+      });
+    }
+    
+    console.log("💾 Mise à jour du statut en base...");
+    // Mise à jour du statut
+    const result = await pool.query(
+      `UPDATE utilisateurs 
+       SET statut = $1, date_modification = NOW() 
+       WHERE id = $2
+       RETURNING id, nom, email, role, type, statut, date_creation`,
+      [statut, id]
+    );
+    
+    console.log("✅ Statut mis à jour avec succès");
+    
+    res.json({ 
+      message: "Statut utilisateur mis à jour avec succès",
+      success: true,
+      user: result.rows[0]
+    });
+    
+  } catch (err) {
+    console.error("❌ ERREUR UPDATE STATUS:", err);
+    
+    res.status(500).json({ 
+      message: "Erreur serveur lors de la mise à jour du statut",
+      error: err.message 
+    });
+  }
+});
 
 module.exports = router;
