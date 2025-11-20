@@ -90,6 +90,7 @@ const adminRoutes = require('./routes/admin');
 const contactRoutes = require('./routes/contact');
 const candidaturesRoutes = require('./routes/candidatures');
 const candidatureSpontaneeRoutes = require('./routes/candidatureSpontanee');
+const offresRoutes = require('./routes/offres');
 
 app.use('/api/candidatures/spontanees', candidatureSpontaneeRoutes);
 app.use('/api/auth', authRoutes);
