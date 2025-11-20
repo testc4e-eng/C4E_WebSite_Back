@@ -90,14 +90,13 @@ const adminRoutes = require('./routes/admin');
 const contactRoutes = require('./routes/contact');
 const candidaturesRoutes = require('./routes/candidatures');
 const candidatureSpontaneeRoutes = require('./routes/candidatureSpontanee');
-const offresRoutes = require('./routes/offres');
 
+app.use('/api/candidatures/spontanees', candidatureSpontaneeRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/contact', contactRoutes);
 app.use('/api/candidatures', candidaturesRoutes);
 app.use('/api/offres', offresRoutes);
-app.use('/api/candidatures/spontanees', candidatureSpontaneeRoutes);
 /* ----------------------------
    UPLOADS (PDF seulement)
    ---------------------------- */
