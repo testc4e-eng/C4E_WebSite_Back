@@ -1,4 +1,4 @@
-// 📂 routes/admin.js - VERSION TABLE UNIFIÉE
+// 📂 routes/admin.js - VERSION COMPLÈTE CORRIGÉE
 const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcrypt");
@@ -31,135 +31,208 @@ const verifyAdmin = (req, res, next) => {
   }
 };
 
-// CREATE utilisateur - VERSION TABLE UNIFIÉE
-// 📂 routes/admin.js - CORRECTION DE LA ROUTE CREATE
-// 📂 routes/admin.js - VERSION AVEC DEBUG COMPLET
-// 📂 routes/admin.js - VERSION DÉBOGAGE ULTIME
-router.post("/:type", verifyAdmin, async (req, res) => {
-  let client;
-  try {
-    console.log("=== 🚨 DÉBUT CRÉATION UTILISATEUR 🚨 ===");
-    console.log("📥 Headers:", req.headers);
-    console.log("📦 Body COMPLET:", req.body);
-    console.log("🔍 Type demandé:", req.params.type);
-    
-    // Vérifier que le body est bien parsé
-    if (!req.body) {
-      console.log("❌ Body vide ou non parsé");
-      return res.status(400).json({ message: "Données manquantes" });
-    }
+// ==================== ROUTES DE DIAGNOSTIC ====================
 
+// Route de test simple
+router.post("/test-debug", verifyAdmin, async (req, res) => {
+  console.log("=== 🧪 ROUTE TEST DEBUG ===");
+  console.log("📦 Body reçu:", req.body);
+  
+  try {
+    // Test simple avec des données fixes
+    const testEmail = `test${Date.now()}@test.com`;
+    const testPassword = "test123";
+    const hashedPassword = await bcrypt.hash(testPassword, 10);
+
+    console.log("💾 Insertion test...");
+    const result = await pool.query(
+      `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, type, statut, date_creation) 
+       VALUES ($1, $2, $3, $4, $5, 'actif', NOW()) 
+       RETURNING id, nom, email`,
+      ['Test User', testEmail, hashedPassword, 'gestionnaire', 'gestionnaire']
+    );
+
+    console.log("✅ Test réussi:", result.rows[0]);
+    
+    res.json({ 
+      success: true,
+      message: "Test réussi - La base de données fonctionne",
+      user: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error("❌ Test échoué:", err.message);
+    console.error("🔴 Détails:", err);
+    
+    res.status(500).json({ 
+      success: false,
+      error: err.message,
+      code: err.code,
+      detail: err.detail
+    });
+  }
+});
+
+// Route pour vérifier la structure de la table
+router.get("/check-table", verifyAdmin, async (req, res) => {
+  try {
+    console.log("🔍 Vérification structure table...");
+    
+    // Vérifier si la table existe
+    const tableExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'utilisateurs'
+      );
+    `);
+    
+    // Vérifier la structure
+    const structure = await pool.query(`
+      SELECT column_name, data_type, is_nullable, character_maximum_length
+      FROM information_schema.columns 
+      WHERE table_name = 'utilisateurs'
+      ORDER BY ordinal_position;
+    `);
+    
+    // Vérifier les données existantes
+    const existingUsers = await pool.query(`
+      SELECT id, email, type, role FROM utilisateurs LIMIT 5;
+    `);
+    
+    res.json({
+      tableExists: tableExists.rows[0].exists,
+      structure: structure.rows,
+      existingUsers: existingUsers.rows,
+      totalUsers: existingUsers.rows.length
+    });
+    
+  } catch (err) {
+    console.error("❌ Erreur vérification:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Route de création ultra-simplifiée
+router.post("/simple-create", verifyAdmin, async (req, res) => {
+  console.log("=== 🎯 SIMPLE CREATE ===");
+  console.log("📦 Body:", JSON.stringify(req.body, null, 2));
+  
+  try {
     const { email, motDePasse, nom } = req.body;
     
-    console.log("📋 Données extraites:", { email, motDePasse: motDePasse ? "***" : "MANQUANT", nom });
-
-    // Validation basique
+    // Validation minimale
     if (!email || !motDePasse) {
-      console.log("❌ Champs manquants - email:", !!email, "motDePasse:", !!motDePasse);
+      return res.status(400).json({ 
+        message: "Email et mot de passe requis",
+        received: { email: !!email, motDePasse: !!motDePasse }
+      });
+    }
+    
+    // Hash simple
+    const hashedPassword = await bcrypt.hash(motDePasse, 10);
+    
+    // Insertion simple
+    const result = await pool.query(
+      `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, type, statut, date_creation) 
+       VALUES ($1, $2, $3, $4, $5, 'actif', NOW()) 
+       RETURNING id, nom, email, role, type`,
+      [nom || 'Utilisateur', email, hashedPassword, 'gestionnaire', 'gestionnaire']
+    );
+    
+    res.json({ 
+      success: true,
+      message: "Utilisateur créé",
+      user: result.rows[0]
+    });
+    
+  } catch (err) {
+    console.error("❌ Simple create error:", err);
+    res.status(500).json({ 
+      success: false,
+      error: err.message,
+      code: err.code
+    });
+  }
+});
+
+// ==================== ROUTES PRINCIPALES ====================
+
+// CREATE utilisateur - VERSION CORRIGÉE ET SIMPLIFIÉE
+router.post("/:type", verifyAdmin, async (req, res) => {
+  try {
+    console.log("=== DÉBUT CRÉATION UTILISATEUR ===");
+    console.log("📦 Body reçu:", req.body);
+    console.log("🔍 Type demandé:", req.params.type);
+    
+    const { email, motDePasse, nom } = req.body;
+    
+    // Validation
+    if (!email || !motDePasse) {
       return res.status(400).json({ 
         message: "Email et mot de passe requis",
         received: { email: !!email, motDePasse: !!motDePasse, nom: !!nom }
       });
     }
 
-    // Tester la connexion à la base FIRST
-    console.log("🔌 Test connexion base de données...");
-    client = await pool.connect();
-    console.log("✅ Connexion BD OK");
-
-    // Vérifier si la table existe
-    const tableCheck = await client.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'utilisateurs'
-      );
-    `);
-    console.log("📊 Table utilisateurs existe:", tableCheck.rows[0].exists);
-
-    if (!tableCheck.rows[0].exists) {
-      throw new Error("Table 'utilisateurs' n'existe pas");
+    // Validation email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Format d'email invalide" });
     }
 
-    // Vérifier la structure de la table
-    const structure = await client.query(`
-      SELECT column_name, data_type, is_nullable 
-      FROM information_schema.columns 
-      WHERE table_name = 'utilisateurs'
-      ORDER BY ordinal_position;
-    `);
-    console.log("🏗️ Structure table:", structure.rows);
-
-    // Vérifier email unique
-    console.log("🔎 Vérification email unique...");
-    const exist = await client.query(`SELECT id FROM utilisateurs WHERE email = $1`, [email]);
-    console.log("📧 Email existe déjà:", exist.rows.length > 0);
-
+    // Déterminer le type d'utilisateur
+    const userType = req.params.type === "administrateurs" ? "administrateur" : "gestionnaire";
+    const role = req.params.type === "administrateurs" ? "admin" : "gestionnaire";
+    
+    // Vérifier si l'email existe déjà
+    const exist = await pool.query(`SELECT id FROM utilisateurs WHERE email = $1`, [email]);
     if (exist.rows.length > 0) {
       return res.status(409).json({ message: "Email déjà utilisé" });
     }
 
-    // Hashage mot de passe
-    console.log("🔐 Hashage mot de passe...");
+    // Hashage du mot de passe
     const hashedPassword = await bcrypt.hash(motDePasse, 10);
-    console.log("✅ Mot de passe hashé");
-
-    // Déterminer type et rôle
-    const userType = req.params.type === "administrateurs" ? "administrateur" : "gestionnaire";
-    const role = req.params.type === "administrateurs" ? "admin" : "gestionnaire";
-    
-    console.log("🎯 Type final:", userType, "Rôle:", role);
 
     // Insertion
-    console.log("💾 Insertion en cours...");
-    const query = `
-      INSERT INTO utilisateurs (nom, email, mot_de_passe, role, type, statut, date_creation) 
-      VALUES ($1, $2, $3, $4, $5, 'actif', NOW()) 
-      RETURNING id, nom, email, role, type, date_creation, statut
-    `;
-    const values = [nom || 'Utilisateur', email, hashedPassword, role, userType];
-    
-    console.log("📝 Query:", query);
-    console.log("🎯 Values:", values);
+    const result = await pool.query(
+      `INSERT INTO utilisateurs (nom, email, mot_de_passe, role, type, statut, date_creation) 
+       VALUES ($1, $2, $3, $4, $5, 'actif', NOW()) 
+       RETURNING id, nom, email, role, type, date_creation, statut`,
+      [nom || 'Utilisateur', email, hashedPassword, role, userType]
+    );
 
-    const result = await client.query(query, values);
-    console.log("✅ Insertion réussie:", result.rows[0]);
-
-    console.log("=== 🎉 CRÉATION RÉUSSIE 🎉 ===");
+    console.log("✅ Utilisateur créé avec succès");
     
     res.status(201).json({ 
-      message: "Utilisateur créé avec succès",
+      message: `${userType === "administrateur" ? "Administrateur" : "Gestionnaire"} créé avec succès`,
       success: true,
       user: result.rows[0]
     });
     
   } catch (err) {
-    console.error("❌ 🚨 ERREUR CRITIQUE 🚨");
-    console.error("🔴 Message:", err.message);
-    console.error("🔴 Code:", err.code);
-    console.error("🔴 Stack:", err.stack);
+    console.error("❌ ERREUR CREATE:", err);
     
-    // Erreur détaillée
-    const errorResponse = {
-      message: "Erreur lors de la création",
-      error: err.message,
-      code: err.code,
-      detail: err.detail,
-      routine: err.routine
-    };
+    // Gestion d'erreur détaillée
+    let errorMessage = "Erreur serveur lors de la création";
+    let statusCode = 500;
     
-    console.error("📤 Réponse d'erreur:", errorResponse);
-    
-    res.status(500).json(errorResponse);
-    
-  } finally {
-    if (client) {
-      client.release();
-      console.log("🔌 Connexion BD libérée");
+    if (err.code === '23505') {
+      errorMessage = "Cet email est déjà utilisé";
+      statusCode = 409;
+    } else if (err.code === '23502') {
+      errorMessage = "Données manquantes requises";
+      statusCode = 400;
     }
+    
+    res.status(statusCode).json({ 
+      message: errorMessage,
+      error: err.message,
+      code: err.code
+    });
   }
 });
 
-// GET gestionnaires - ROUTE SPÉCIFIQUE CORRIGÉE
+// GET gestionnaires
 router.get("/gestionnaires", verifyAdmin, async (req, res) => {
   try {
     console.log("🔍 Récupération des gestionnaires...");
@@ -209,12 +282,44 @@ router.get("/administrateurs", verifyAdmin, async (req, res) => {
   }
 });
 
-// DELETE utilisateur - VERSION TABLE UNIFIÉE
+// GET tous les utilisateurs
+router.get("/utilisateurs", verifyAdmin, async (req, res) => {
+  try {
+    console.log("🔍 Récupération de tous les utilisateurs...");
+    
+    const result = await pool.query(`
+      SELECT id, nom, email, role, type, statut, 
+             date_creation, dernier_connexion, sites_geres
+      FROM utilisateurs 
+      WHERE type IN ('gestionnaire', 'administrateur')
+      ORDER BY date_creation DESC
+    `);
+    
+    console.log(`✅ ${result.rows.length} utilisateurs trouvés`);
+    res.json(result.rows);
+    
+  } catch (err) {
+    console.error('❌ Erreur /api/admin/utilisateurs:', err);
+    res.status(500).json({ 
+      message: 'Erreur serveur lors de la récupération des utilisateurs',
+      error: err.message 
+    });
+  }
+});
+
+// DELETE utilisateur
 router.delete("/:type/:id", verifyAdmin, async (req, res) => {
   try {
     const { type, id } = req.params;
     
-    await pool.query(`DELETE FROM utilisateurs WHERE id = $1 AND type = $2`, [id, type === "administrateurs" ? "administrateur" : "gestionnaire"]);
+    const result = await pool.query(
+      `DELETE FROM utilisateurs WHERE id = $1 AND type = $2`, 
+      [id, type === "administrateurs" ? "administrateur" : "gestionnaire"]
+    );
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
     
     res.json({ 
       message: "Utilisateur supprimé avec succès",
@@ -225,10 +330,11 @@ router.delete("/:type/:id", verifyAdmin, async (req, res) => {
     res.status(500).json({ message: "Erreur lors de la suppression" });
   }
 });
+
+// PUT - Changer le mot de passe
 router.put("/:type/:id/password", verifyAdmin, async (req, res) => {
   try {
     console.log("🔄 PUT reçu - Mise à jour mot de passe");
-    console.log("📦 Body reçu:", req.body);
     
     const { type, id } = req.params;
     const { nouveauMotDePasse, confirmationMotDePasse } = req.body;
@@ -264,11 +370,9 @@ router.put("/:type/:id/password", verifyAdmin, async (req, res) => {
       });
     }
     
-    console.log("🔐 Hashage du nouveau mot de passe...");
     // Hashage du nouveau mot de passe
     const hashedPassword = await bcrypt.hash(nouveauMotDePasse, 10);
     
-    console.log("💾 Mise à jour en base...");
     // Mise à jour du mot de passe
     await pool.query(
       `UPDATE utilisateurs 
@@ -293,10 +397,11 @@ router.put("/:type/:id/password", verifyAdmin, async (req, res) => {
     });
   }
 });
+
+// PUT - Changer le statut
 router.put("/:type/:id/status", verifyAdmin, async (req, res) => {
   try {
     console.log("🔄 PUT reçu - Changement de statut");
-    console.log("📦 Body reçu:", req.body);
     
     const { type, id } = req.params;
     const { statut } = req.body;
@@ -320,7 +425,6 @@ router.put("/:type/:id/status", verifyAdmin, async (req, res) => {
       });
     }
     
-    console.log("💾 Mise à jour du statut en base...");
     // Mise à jour du statut
     const result = await pool.query(
       `UPDATE utilisateurs 
@@ -343,30 +447,6 @@ router.put("/:type/:id/status", verifyAdmin, async (req, res) => {
     
     res.status(500).json({ 
       message: "Erreur serveur lors de la mise à jour du statut",
-      error: err.message 
-    });
-  }
-});
-
-router.get("/utilisateurs", verifyAdmin, async (req, res) => {
-  try {
-    console.log("🔍 Récupération de tous les utilisateurs...");
-    
-    const result = await pool.query(`
-      SELECT id, nom, email, role, type, statut, 
-             date_creation, dernier_connexion, sites_geres
-      FROM utilisateurs 
-      WHERE type IN ('gestionnaire', 'administrateur')
-      ORDER BY date_creation DESC
-    `);
-    
-    console.log(`✅ ${result.rows.length} utilisateurs trouvés`);
-    res.json(result.rows);
-    
-  } catch (err) {
-    console.error('❌ Erreur /api/admin/utilisateurs:', err);
-    res.status(500).json({ 
-      message: 'Erreur serveur lors de la récupération des utilisateurs',
       error: err.message 
     });
   }
