@@ -32,6 +32,7 @@ const verifyAdmin = (req, res, next) => {
 };
 
 // CREATE utilisateur - VERSION TABLE UNIFIÉE
+// 📂 routes/admin.js - CORRECTION DE LA ROUTE CREATE
 router.post("/:type", verifyAdmin, async (req, res) => {
   try {
     console.log("📥 POST reçu - Type:", req.params.type);
@@ -39,20 +40,28 @@ router.post("/:type", verifyAdmin, async (req, res) => {
     
     const { email, motDePasse, nom } = req.body;
     
-    // Validation
+    // Validation améliorée
     if (!email || !motDePasse) {
+      console.log("❌ Validation failed: email or password missing");
       return res.status(400).json({ message: "Email et mot de passe requis" });
+    }
+
+    // Validation de l'email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Format d'email invalide" });
     }
 
     // Déterminer le type d'utilisateur
     const userType = req.params.type === "administrateurs" ? "administrateur" : "gestionnaire";
     const role = req.params.type === "administrateurs" ? "admin" : "gestionnaire";
     
-    console.log("🔍 Vérification email...");
+    console.log("🔍 Vérification email pour:", email);
     
-    // Vérifier si l'email existe déjà dans utilisateurs
+    // Vérifier si l'email existe déjà
     const exist = await pool.query(`SELECT id FROM utilisateurs WHERE email = $1`, [email]);
     if (exist.rows.length > 0) {
+      console.log("❌ Email déjà utilisé:", email);
       return res.status(409).json({ message: "Email déjà utilisé" });
     }
 
@@ -69,7 +78,7 @@ router.post("/:type", verifyAdmin, async (req, res) => {
       [nom || 'Utilisateur', email, hashedPassword, role, userType]
     );
 
-    console.log("✅ Utilisateur créé");
+    console.log("✅ Utilisateur créé avec succès:", result.rows[0]);
     
     res.status(201).json({ 
       message: `${userType === "administrateur" ? "Administrateur" : "Gestionnaire"} créé avec succès`,
@@ -79,10 +88,20 @@ router.post("/:type", verifyAdmin, async (req, res) => {
     
   } catch (err) {
     console.error("❌ ERREUR CREATE:", err);
+    console.error("❌ Stack trace:", err.stack);
+    
+    // Erreur plus spécifique
+    let errorMessage = "Erreur serveur lors de la création";
+    if (err.code === '23505') { // Violation de contrainte unique
+      errorMessage = "Cet email est déjà utilisé";
+    } else if (err.code === '23502') { // Violation de contrainte NOT NULL
+      errorMessage = "Données manquantes requises";
+    }
     
     res.status(500).json({ 
-      message: "Erreur serveur lors de la création",
-      error: err.message 
+      message: errorMessage,
+      error: err.message,
+      code: err.code
     });
   }
 });
@@ -271,6 +290,30 @@ router.put("/:type/:id/status", verifyAdmin, async (req, res) => {
     
     res.status(500).json({ 
       message: "Erreur serveur lors de la mise à jour du statut",
+      error: err.message 
+    });
+  }
+});
+
+router.get("/utilisateurs", verifyAdmin, async (req, res) => {
+  try {
+    console.log("🔍 Récupération de tous les utilisateurs...");
+    
+    const result = await pool.query(`
+      SELECT id, nom, email, role, type, statut, 
+             date_creation, dernier_connexion, sites_geres
+      FROM utilisateurs 
+      WHERE type IN ('gestionnaire', 'administrateur')
+      ORDER BY date_creation DESC
+    `);
+    
+    console.log(`✅ ${result.rows.length} utilisateurs trouvés`);
+    res.json(result.rows);
+    
+  } catch (err) {
+    console.error('❌ Erreur /api/admin/utilisateurs:', err);
+    res.status(500).json({ 
+      message: 'Erreur serveur lors de la récupération des utilisateurs',
       error: err.message 
     });
   }
