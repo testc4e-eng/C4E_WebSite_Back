@@ -129,7 +129,7 @@ router.post('/', upload.fields([
 
     // -------------------- INSERT --------------------
     const query = `
-      INSERT INTO candidatures_spontanees
+      INSERT INTO candidatures_stage
       (nom, prenom, email, telephone, cv_path, lettre_motivation,
        domaine, duree, poste, competences, type_etablissement,
        diplome, experience, date_soumission)
