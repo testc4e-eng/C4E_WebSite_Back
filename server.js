@@ -105,7 +105,7 @@ const contactRoutes = require('./routes/contact');
 const candidaturesRoutes = require('./routes/candidatures');
 const candidatureSpontaneeRoutes = require('./routes/candidatureSpontanee');
 const offresRoutes = require('./routes/offres');
-const candidaturesStageRoutes = require('./routes/candidaturesStage');
+
 
 // 🔥 MONTAGE CORRECT des routes
 app.use('/api/auth', authRoutes);
@@ -114,7 +114,6 @@ app.use('/api/contact', contactRoutes); // Changé de '/contact' à '/api/contac
 app.use('/api/candidatures', candidaturesRoutes);
 app.use('/api/candidatures/spontanees', candidatureSpontaneeRoutes);
 app.use('/api/offres', offresRoutes);
-app.use('/api/candidatures/stage', candidaturesStageRoutes);
 
 /* ----------------------------
    UPLOADS (PDF seulement)
