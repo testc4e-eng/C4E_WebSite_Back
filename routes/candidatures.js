@@ -8,7 +8,7 @@ const fs = require('fs').promises;
 
 // Middleware pour servir les fichiers CV et lettres de motivation
 router.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-router.get('/stage/toutes', candidatureController.getAllStageCandidatures);
+
 // 🔹 Calcul du score de compétences
 const calculateCompetenceScore = (competences) => {
   if (!competences || typeof competences !== 'object') return 0;
