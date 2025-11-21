@@ -114,8 +114,7 @@ app.use('/api/contact', contactRoutes); // Changé de '/contact' à '/api/contac
 app.use('/api/candidatures', candidaturesRoutes);
 app.use('/api/candidatures/spontanees', candidatureSpontaneeRoutes);
 app.use('/api/offres', offresRoutes);
-app.use("/api/candidatures/stage", require("./routes/candidatureStage"));
-/* ----------------------------
+app.use("/api/candidatures/spontanees", require("./routes/candidatureStage"));/* ----------------------------
    UPLOADS (PDF seulement)
    ---------------------------- */
 const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploads');
