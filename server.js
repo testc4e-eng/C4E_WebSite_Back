@@ -99,7 +99,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
    Routes API
    ---------------------------- */
 // 🔥 IMPORT CORRECT des routes
-const { router: authRoutes } = require('./routes/auth'); // Correction ici
+const authRoutes = require('./routes/auth');// Correction ici
 const adminRoutes = require('./routes/admin');
 const contactRoutes = require('./routes/contact');
 const candidaturesRoutes = require('./routes/candidatures');
