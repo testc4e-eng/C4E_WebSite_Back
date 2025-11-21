@@ -38,9 +38,9 @@ const upload = multer({
 // 🔥 ROUTE POUR RÉCUPÉRER TOUTES LES CANDIDATURES STAGE
 router.get('/toutes', async (req, res) => {
   try {
-const result = await pool.query(
-  `SELECT * FROM candidatures_stage ORDER BY date_soumission DESC`
-);
+    const result = await pool.query(
+      `SELECT * FROM candidatures_stage ORDER BY date_soumission DESC`
+    );
 
     res.status(200).json({
       message: 'Liste des candidatures spontanées',
@@ -84,6 +84,62 @@ router.get('/:id', async (req, res) => {
     console.error(`❌ Erreur GET candidature stage ${id}:`, error.message);
     res.status(500).json({ 
       message: 'Erreur serveur lors de la récupération de la candidature',
+      error: error.message 
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// ===================== ROUTE PUT POUR MODIFIER LE STATUT =====================
+router.put('/:id', async (req, res) => {
+  const client = await pool.connect();
+  const { id } = req.params;
+  const { statut } = req.body;
+
+  try {
+    console.log(`🔄 Mise à jour statut candidature stage ${id}:`, { statut });
+
+    // Vérifier que la candidature existe
+    const checkQuery = 'SELECT * FROM candidatures_stage WHERE id = $1';
+    const checkResult = await client.query(checkQuery, [id]);
+    
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ 
+        message: 'Candidature non trouvée' 
+      });
+    }
+
+    // Valider le statut
+    const statutsValides = ['en_attente', 'acceptee', 'refusee'];
+    if (!statutsValides.includes(statut)) {
+      return res.status(400).json({ 
+        message: 'Statut invalide. Valeurs acceptées: en_attente, acceptee, refusee' 
+      });
+    }
+
+    // Mettre à jour le statut
+    const updateQuery = `
+      UPDATE candidatures_stage 
+      SET statut = $1, date_mise_a_jour = NOW()
+      WHERE id = $2 
+      RETURNING *
+    `;
+    
+    const values = [statut, id];
+    const result = await client.query(updateQuery, values);
+
+    console.log(`✅ Statut candidature stage ${id} mis à jour: ${statut}`);
+
+    res.status(200).json({
+      message: 'Statut mis à jour avec succès',
+      candidature: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error(`❌ Erreur PUT candidature stage ${id}:`, error.message);
+    res.status(500).json({ 
+      message: 'Erreur serveur lors de la mise à jour',
       error: error.message 
     });
   } finally {
