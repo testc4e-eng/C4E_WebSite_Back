@@ -316,14 +316,15 @@ router.get('/me', async (req, res) => {
   }
 });
 
-// ✅ ROUTE CHANGE-PASSWORD CORRIGÉE
+// 📂 routes/auth.js - AJOUTER CETTE ROUTE
+// 📂 routes/auth.js - ROUTE CHANGE-PASSWORD AMÉLIORÉE
+// 📂 routes/auth.js - ROUTE CHANGE-PASSWORD CORRIGÉE
 router.put("/change-password", verifyToken, async (req, res) => {
-  let client;
   try {
-    console.log("🔄 REQUÊTE CHANGE-PASSWORD REÇUE");
-    console.log("👤 User ID:", req.user.id);
+    console.log("🔄 REQUÊTE CHANGE-PASSWORD REÇUE:");
     console.log("📦 Body:", req.body);
-
+    console.log("👤 User from token:", req.user);
+    
     const { currentPassword, newPassword, confirmPassword } = req.body;
     const userId = req.user.id;
 
@@ -342,22 +343,17 @@ router.put("/change-password", verifyToken, async (req, res) => {
 
     if (newPassword.length < 6) {
       return res.status(400).json({ 
-        message: "Le mot de passe doit contenir au moins 6 caractères" 
+        message: "Le nouveau mot de passe doit contenir au moins 6 caractères" 
       });
     }
 
-    // Utiliser une transaction
-    client = await pool.connect();
-    await client.query('BEGIN');
-
     // Récupérer l'utilisateur
-    const userResult = await client.query(
+    const userResult = await pool.query(
       `SELECT id, email, mot_de_passe FROM utilisateurs WHERE id = $1`,
       [userId]
     );
 
     if (userResult.rows.length === 0) {
-      await client.query('ROLLBACK');
       return res.status(404).json({ 
         message: "Utilisateur non trouvé" 
       });
@@ -369,7 +365,6 @@ router.put("/change-password", verifyToken, async (req, res) => {
     const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.mot_de_passe);
     
     if (!isCurrentPasswordValid) {
-      await client.query('ROLLBACK');
       return res.status(400).json({ 
         message: "Le mot de passe actuel est incorrect" 
       });
@@ -378,15 +373,16 @@ router.put("/change-password", verifyToken, async (req, res) => {
     // Hashage du nouveau mot de passe
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
-    // Mise à jour SIMPLIFIÉE - sans date_modification problématique
-    const updateResult = await client.query(
-      `UPDATE utilisateurs SET mot_de_passe = $1 WHERE id = $2 RETURNING id, email`,
-      [hashedNewPassword, userId]
+    // Mise à jour en base - CORRECTION ICI
+    const updateResult = await pool.query(
+      `UPDATE utilisateurs 
+       SET mot_de_passe = $1, date_modification = NOW() 
+       WHERE id = $2
+       RETURNING id, email, date_modification`,
+      [hashedNewPassword, userId] // ← Tableau correctement fermé
     );
 
-    await client.query('COMMIT');
-    
-    console.log("✅ Mot de passe mis à jour pour:", user.email);
+    console.log("✅ Mise à jour réussie:", updateResult.rows[0]);
 
     res.json({ 
       message: "Mot de passe mis à jour avec succès",
@@ -394,81 +390,14 @@ router.put("/change-password", verifyToken, async (req, res) => {
     });
 
   } catch (err) {
-    if (client) {
-      await client.query('ROLLBACK');
-    }
-    
     console.error("❌ ERREUR CHANGE PASSWORD:", err);
     res.status(500).json({ 
-      message: "Erreur lors du changement de mot de passe",
-      error: err.message
-    });
-  } finally {
-    if (client) {
-      client.release();
-    }
-  }
-});
-
-// 🎯 ROUTE TEMPORAIRE POUR DEBUG - À ajouter dans routes/auth.js
-router.put("/debug-change-password", verifyToken, async (req, res) => {
-  try {
-    console.log("🐛 DEBUG - Début changement mot de passe");
-    console.log("🐛 User ID:", req.user.id);
-    console.log("🐛 Body:", req.body);
-
-    const { currentPassword, newPassword, confirmPassword } = req.body;
-    const userId = req.user.id;
-
-    // Test simple de la base
-    const userResult = await pool.query(
-      'SELECT id, email, mot_de_passe FROM utilisateurs WHERE id = $1',
-      [userId]
-    );
-
-    console.log("🐛 Utilisateur trouvé:", userResult.rows[0] ? "OUI" : "NON");
-
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ message: "Utilisateur non trouvé" });
-    }
-
-    const user = userResult.rows[0];
-    console.log("🐛 Email utilisateur:", user.email);
-
-    // Test de comparaison
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.mot_de_passe);
-    console.log("🐛 Mot de passe actuel valide:", isCurrentPasswordValid);
-
-    if (!isCurrentPasswordValid) {
-      return res.status(400).json({ message: "Mot de passe actuel incorrect" });
-    }
-
-    // Test de hashage
-    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-    console.log("🐛 Hashage réussi");
-
-    // Test de mise à jour SIMPLIFIÉE
-    const updateResult = await pool.query(
-      'UPDATE utilisateurs SET mot_de_passe = $1 WHERE id = $2 RETURNING id, email',
-      [hashedNewPassword, userId]
-    );
-
-    console.log("🐛 Mise à jour réussie");
-
-    res.json({ 
-      message: "Mot de passe mis à jour avec succès",
-      success: true 
-    });
-
-  } catch (err) {
-    console.error("🐛 ERREUR DÉTAILLÉE:", err);
-    console.error("🐛 Stack:", err.stack);
-    res.status(500).json({ 
-      message: "Erreur détaillée",
-      error: err.message,
-      code: err.code
+      message: "Erreur serveur lors du changement de mot de passe",
+      error: process.env.NODE_ENV === 'development' ? err.message : 'Erreur interne'
     });
   }
 });
+
+
 
 module.exports = router;
