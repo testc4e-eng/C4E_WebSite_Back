@@ -23,7 +23,6 @@ const storage = multer.diskStorage({
   filename: (_, file, cb) => cb(null, Date.now() + '-' + file.originalname),
 });
 
-// 🔥 NOUVEAU : Filtre pour n'accepter que les PDF
 const fileFilter = (req, file, cb) => {
   if (file.mimetype === 'application/pdf') {
     cb(null, true);
@@ -34,13 +33,83 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ 
   storage,
-  fileFilter, // 🔥 Ajout du filtre PDF
+  fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB max
+    fileSize: 5 * 1024 * 1024,
   }
 });
 
-// ===================== ROUTE POST =====================
+// ===================== ROUTES GET =====================
+
+// 🔥 ROUTE POUR RÉCUPÉRER TOUTES LES CANDIDATURES STAGE
+router.get('/toutes', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const query = `
+      SELECT * FROM candidatures_stage 
+      ORDER BY date_soumission DESC
+    `;
+    
+    const result = await client.query(query);
+    
+    console.log(`✅ ${result.rows.length} candidatures de stage récupérées`);
+    
+    res.status(200).json({
+      message: 'Candidatures récupérées avec succès',
+      candidatures: result.rows,
+      count: result.rows.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Erreur GET toutes les candidatures stage:', error.message);
+    res.status(500).json({ 
+      message: 'Erreur serveur lors de la récupération des candidatures',
+      error: error.message 
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// 🔥 ROUTE POUR RÉCUPÉRER UNE CANDIDATURE SPÉCIFIQUE
+router.get('/:id', async (req, res) => {
+  const client = await pool.connect();
+  const { id } = req.params;
+  
+  try {
+    const query = `
+      SELECT * FROM candidatures_stage 
+      WHERE id = $1
+    `;
+    
+    const result = await client.query(query, [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ 
+        message: 'Candidature non trouvée' 
+      });
+    }
+    
+    console.log(`✅ Candidature stage ${id} récupérée`);
+    
+    res.status(200).json({
+      message: 'Candidature récupérée avec succès',
+      candidature: result.rows[0]
+    });
+    
+  } catch (error) {
+    console.error(`❌ Erreur GET candidature stage ${id}:`, error.message);
+    res.status(500).json({ 
+      message: 'Erreur serveur lors de la récupération de la candidature',
+      error: error.message 
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// ===================== ROUTE POST EXISTANTE =====================
 router.post('/', upload.fields([
   { name: 'cv', maxCount: 1 },
   { name: 'lettre_motivation', maxCount: 1 }
@@ -61,12 +130,10 @@ router.post('/', upload.fields([
       });
     }
 
-    // 🔥 NOUVEAU : Vérification que les fichiers sont bien des PDF
     const cvFile = req.files['cv'][0];
     const lettreFile = req.files['lettre_motivation'][0];
 
     if (cvFile.mimetype !== 'application/pdf' || lettreFile.mimetype !== 'application/pdf') {
-      // Supprimer les fichiers uploadés si ce ne sont pas des PDF
       if (req.files['cv']) {
         fs.unlinkSync(path.join(__dirname, '..', `/uploads/${cvFile.filename}`));
       }
@@ -87,7 +154,6 @@ router.post('/', upload.fields([
       !nom || !prenom || !email || !telephone ||
       !domaine || !duree || !type_etablissement || !diplome
     ) {
-      // Supprimer les fichiers uploadés si validation échoue
       if (req.files['cv']) {
         fs.unlinkSync(path.join(__dirname, '..', cvPath));
       }
@@ -106,7 +172,6 @@ router.post('/', upload.fields([
       try {
         competencesJSON = JSON.stringify(JSON.parse(competences));
       } catch (err) {
-        // Supprimer les fichiers uploadés si validation échoue
         if (req.files['cv']) {
           fs.unlinkSync(path.join(__dirname, '..', cvPath));
         }
@@ -172,7 +237,6 @@ router.post('/', upload.fields([
   } catch (error) {
     console.error('❌ Erreur POST candidature spontanée:', error.message);
     
-    // Gestion spécifique des erreurs Multer (fichiers non PDF)
     if (error instanceof multer.MulterError) {
       if (error.code === 'LIMIT_UNEXPECTED_FILE') {
         return res.status(400).json({ 
@@ -181,7 +245,6 @@ router.post('/', upload.fields([
       }
     }
     
-    // Supprimer les fichiers uploadés en cas d'erreur
     if (req.files) {
       if (req.files['cv']) {
         fs.unlinkSync(path.join(__dirname, '..', `/uploads/${req.files['cv'][0].filename}`));
