@@ -4,7 +4,7 @@ const pool = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
-// Middleware verifyToken manquant - AJOUTÉ
+// Middleware verifyToken
 const verifyToken = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -30,23 +30,48 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-// POST /api/auth/login - VERSION TABLE UNIFIÉE
+// Middleware verifyAdmin
+const verifyAdmin = (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: "Token manquant" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Vérifier si l'utilisateur est admin
+    if (decoded.role !== 'admin' && decoded.type !== 'administrateur') {
+      return res.status(403).json({ message: "Accès réservé aux administrateurs" });
+    }
+    
+    req.user = decoded;
+    next();
+  } catch (err) {
+    console.error("Middleware verifyAdmin error:", err.message);
+    
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token expiré" });
+    } else if (err.name === "JsonWebTokenError") {
+      return res.status(401).json({ message: "Token invalide" });
+    } else {
+      return res.status(401).json({ message: "Erreur d'authentification" });
+    }
+  }
+};
+
+// POST /api/auth/login
 router.post('/login', async (req, res) => {
-  // AJOUT: Log complet de la requête
   console.log("📨 REQUÊTE LOGIN REÇUE:");
-  console.log("📨 Headers:", req.headers);
   console.log("📨 Body:", req.body);
-  console.log("📨 Content-Type:", req.headers['content-type']);
   
   const { email, motDePasse } = req.body;
   
-  // AJOUT: Vérification détaillée du body
   if (!email || !motDePasse) {
-    console.log("❌ Champs manquants détaillés:", {
+    console.log("❌ Champs manquants:", {
       email: email, 
-      motDePasse: motDePasse,
-      bodyExists: !!req.body,
-      bodyKeys: req.body ? Object.keys(req.body) : 'no body'
+      motDePasse: motDePasse
     });
     return res.status(400).json({ 
       message: 'Email et mot de passe requis.',
@@ -66,7 +91,6 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    // 🔄 RECHERCHE DANS LA TABLE UNIFIÉE
     console.log("🔍 Recherche dans la table utilisateurs...");
     const userResult = await pool.query(
       `SELECT id, nom, email, mot_de_passe, role, type, statut, sites_geres
@@ -88,8 +112,7 @@ router.post('/login', async (req, res) => {
       id: user.id, 
       email: user.email, 
       role: user.role,
-      type: user.type,
-      statut: user.statut
+      type: user.type
     });
 
     // Vérification du mot de passe
@@ -121,7 +144,7 @@ router.post('/login', async (req, res) => {
       id: user.id,
       email: user.email,
       role: user.role,
-      type: user.type // 'administrateur' ou 'gestionnaire'
+      type: user.type
     };
 
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { 
@@ -131,7 +154,7 @@ router.post('/login', async (req, res) => {
     console.log("✅ Connexion réussie pour:", user.email);
     console.log("👤 Type d'utilisateur:", user.type);
 
-    // Réponse réussie avec redirection appropriée
+    // Réponse réussie
     res.json({
       message: 'Connexion réussie',
       token: token,
@@ -140,7 +163,7 @@ router.post('/login', async (req, res) => {
         nom: user.nom,
         email: user.email,
         role: user.role,
-        type: user.type, // 'administrateur' ou 'gestionnaire'
+        type: user.type,
         statut: user.statut,
         sites_geres: user.sites_geres
       },
@@ -157,45 +180,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// 🔧 ROUTE TEMPORAIRE POUR METTRE À JOUR LES MOTS DE PASSE - À SUPPRIMER APRÈS USAGE
-router.post('/update-passwords', async (req, res) => {
-  try {
-    const newPassword = 'c4e@test@2025';
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
-    console.log('🔄 Mise à jour des mots de passe...');
-    console.log('📧 Emails concernés: c4e.africa@gmail.com, rhc4eafrica@gmail.com');
-    
-    // Mettre à jour les deux comptes
-    const result = await pool.query(
-      'UPDATE utilisateurs SET mot_de_passe = $1 WHERE email IN ($2, $3)',
-      [hashedPassword, 'c4e.africa@gmail.com', 'rhc4eafrica@gmail.com']
-    );
-    
-    console.log('✅ Mots de passe mis à jour pour', result.rowCount, 'utilisateurs');
-    
-    // Vérifier quels comptes ont été mis à jour
-    const updatedUsers = await pool.query(
-      'SELECT email, nom, type FROM utilisateurs WHERE email IN ($1, $2)',
-      ['c4e.africa@gmail.com', 'rhc4eafrica@gmail.com']
-    );
-    
-    res.json({ 
-      message: 'Mots de passe mis à jour avec succès',
-      usersUpdated: result.rowCount,
-      updatedUsers: updatedUsers.rows
-    });
-    
-  } catch (err) {
-    console.error('❌ Erreur mise à jour mots de passe:', err);
-    res.status(500).json({ 
-      error: err.message,
-      code: 'ERREUR_MISE_A_JOUR_MDP'
-    });
-  }
-});
-
-// Route pour vérifier le token (keep existing)
+// Route pour vérifier le token
 router.post('/verify', async (req, res) => {
   const { token } = req.body;
 
@@ -256,7 +241,7 @@ router.post('/verify', async (req, res) => {
   }
 });
 
-// Route pour obtenir les infos de l'utilisateur connecté (keep existing)
+// Route pour obtenir les infos de l'utilisateur connecté
 router.get('/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   
@@ -316,9 +301,7 @@ router.get('/me', async (req, res) => {
   }
 });
 
-// 📂 routes/auth.js - AJOUTER CETTE ROUTE
-// 📂 routes/auth.js - ROUTE CHANGE-PASSWORD AMÉLIORÉE
-// 📂 routes/auth.js - ROUTE CHANGE-PASSWORD CORRIGÉE
+// Route changement de mot de passe
 router.put("/change-password", verifyToken, async (req, res) => {
   try {
     console.log("🔄 REQUÊTE CHANGE-PASSWORD REÇUE:");
@@ -373,13 +356,13 @@ router.put("/change-password", verifyToken, async (req, res) => {
     // Hashage du nouveau mot de passe
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
-    // Mise à jour en base - CORRECTION ICI
+    // Mise à jour en base
     const updateResult = await pool.query(
       `UPDATE utilisateurs 
        SET mot_de_passe = $1, date_modification = NOW() 
        WHERE id = $2
        RETURNING id, email, date_modification`,
-      [hashedNewPassword, userId] // ← Tableau correctement fermé
+      [hashedNewPassword, userId]
     );
 
     console.log("✅ Mise à jour réussie:", updateResult.rows[0]);
@@ -398,6 +381,9 @@ router.put("/change-password", verifyToken, async (req, res) => {
   }
 });
 
-
-
-module.exports = router;
+// Exportez le router ET les middlewares
+module.exports = {
+  router,
+  verifyAdmin,
+  verifyToken
+};
