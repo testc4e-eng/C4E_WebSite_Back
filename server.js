@@ -114,8 +114,7 @@ app.use('/api/contact', contactRoutes); // Changé de '/contact' à '/api/contac
 app.use('/api/candidatures', candidaturesRoutes);
 app.use('/api/candidatures/spontanees', candidatureSpontaneeRoutes);
 app.use('/api/offres', offresRoutes);
-app.use("/api/candidatures/stage", require("./routes/candidaturesStage"));
-
+app.use("/api/candidatures/stage", require("./routes/candidatureStage"));
 /* ----------------------------
    UPLOADS (PDF seulement)
    ---------------------------- */
