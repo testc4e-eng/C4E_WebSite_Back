@@ -43,32 +43,20 @@ const upload = multer({
 
 // 🔥 ROUTE POUR RÉCUPÉRER TOUTES LES CANDIDATURES STAGE
 router.get('/toutes', async (req, res) => {
-  const client = await pool.connect();
-  
   try {
-    const query = `
-      SELECT * FROM candidatures_stage 
-      ORDER BY date_soumission DESC
-    `;
-    
-    const result = await client.query(query);
-    
-    console.log(`✅ ${result.rows.length} candidatures de stage récupérées`);
-    
+    const result = await pool.query(
+      `SELECT * FROM candidatures_spontanees ORDER BY date_soumission DESC`
+    );
+
     res.status(200).json({
-      message: 'Candidatures récupérées avec succès',
+      message: 'Liste des candidatures spontanées',
       candidatures: result.rows,
       count: result.rows.length
     });
-    
+
   } catch (error) {
-    console.error('❌ Erreur GET toutes les candidatures stage:', error.message);
-    res.status(500).json({ 
-      message: 'Erreur serveur lors de la récupération des candidatures',
-      error: error.message 
-    });
-  } finally {
-    client.release();
+    console.error("❌ Erreur GET spontanées/toutes:", error.message);
+    res.status(500).json({ message: "Erreur serveur" });
   }
 });
 
