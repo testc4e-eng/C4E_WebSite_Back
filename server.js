@@ -599,6 +599,82 @@ app.use('*', (req, res) => {
   });
 });
 
+// ===================== ROUTE PUT UNIVERSELLE POUR TOUS LES TYPES =====================
+app.put('/api/candidatures/:type/:id', async (req, res) => {
+  const client = await pool.connect();
+  const { type, id } = req.params;
+  const { statut } = req.body;
+
+  try {
+    console.log(`🔄 Mise à jour statut ${type} ${id}:`, { statut });
+
+    // Déterminer la table en fonction du type
+    let tableName;
+    switch (type) {
+      case 'emploi':
+        tableName = 'candidatures_emploi';
+        break;
+      case 'stage':
+      case 'pfe':
+        tableName = 'candidatures_stage';
+        break;
+      case 'spontanee':
+      case 'stage_spontane':
+        tableName = 'candidatures_spontanees';
+        break;
+      default:
+        return res.status(400).json({ 
+          message: 'Type de candidature non supporté' 
+        });
+    }
+
+    // Vérifier que la candidature existe
+    const checkQuery = `SELECT * FROM ${tableName} WHERE id = $1`;
+    const checkResult = await client.query(checkQuery, [id]);
+    
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ 
+        message: 'Candidature non trouvée' 
+      });
+    }
+
+    // Valider le statut
+    const statutsValides = ['en_attente', 'acceptee', 'refusee'];
+    if (!statutsValides.includes(statut)) {
+      return res.status(400).json({ 
+        message: 'Statut invalide. Valeurs acceptées: en_attente, acceptee, refusee' 
+      });
+    }
+
+    // Mettre à jour le statut
+    const updateQuery = `
+      UPDATE ${tableName} 
+      SET statut = $1, date_mise_a_jour = NOW()
+      WHERE id = $2 
+      RETURNING *
+    `;
+    
+    const values = [statut, id];
+    const result = await client.query(updateQuery, values);
+
+    console.log(`✅ Statut ${type} ${id} mis à jour: ${statut}`);
+
+    res.status(200).json({
+      message: 'Statut mis à jour avec succès',
+      candidature: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error(`❌ Erreur PUT ${type} ${id}:`, error.message);
+    res.status(500).json({ 
+      message: 'Erreur serveur lors de la mise à jour',
+      error: error.message 
+    });
+  } finally {
+    client.release();
+  }
+});
+
 /* ----------------------------
    START SERVEUR
    ---------------------------- */
