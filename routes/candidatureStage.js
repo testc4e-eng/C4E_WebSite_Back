@@ -5,13 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { Pool } = require('pg');
 
-const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'c4eafrica',
-  password: process.env.DB_PASSWORD || 'c4e@test@2025',
-  port: process.env.DB_PORT || 5432,
-});
+const pool = require('../db');
 
 // ------------------- Dossier Uploads -------------------
 const uploadDir = path.join(__dirname, '../uploads');
@@ -44,9 +38,9 @@ const upload = multer({
 // 🔥 ROUTE POUR RÉCUPÉRER TOUTES LES CANDIDATURES STAGE
 router.get('/toutes', async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT * FROM candidatures_spontanees ORDER BY date_soumission DESC`
-    );
+const result = await pool.query(
+  `SELECT * FROM candidatures_stage ORDER BY date_soumission DESC`
+);
 
     res.status(200).json({
       message: 'Liste des candidatures spontanées',
