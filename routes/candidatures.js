@@ -6,9 +6,6 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 const fs = require('fs').promises;
 
-// 🔥 CORRECTION : Importez verifyAdmin depuis auth.js
-const { verifyAdmin } = require('./auth');
-
 // Middleware pour servir les fichiers CV et lettres de motivation
 router.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
@@ -217,77 +214,78 @@ async function envoyerEmailCandidat(email, nom, statut, typePoste = 'poste') {
 
     let sujet, html;
 
-    if (statut === 'acceptee') {
-      sujet = 'Félicitations ! Votre candidature a été retenue - C4E Africa';
-      html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #2e7d32; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background: #f9f9f9; }
-            .footer { padding: 20px; text-align: center; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>C4E Africa</h1>
-            </div>
-            <div class="content">
-              <h2>Bonjour ${nom},</h2>
-              <p>Nous avons le plaisir de vous informer que votre candidature pour le poste de <strong>${typePoste}</strong> a été <strong style="color: #2e7d32;">acceptée</strong>.</p>
-              <p>Notre équipe RH vous contactera très prochainement afin de planifier un entretien et finaliser les prochaines étapes du processus.</p>
-              <p>Nous vous remercions pour l'intérêt que vous portez à <strong>C4E Africa</strong> et nous avons hâte d'échanger avec vous.</p>
-            </div>
-            <div class="footer">
-              <p>Cordialement,<br><strong>L'équipe des Ressources Humaines</strong><br>C4E Africa</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
-    } else if (statut === 'refusee') {
-      sujet = 'Réponse à votre candidature - C4E Africa';
-      html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #d32f2f; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background: #f9f9f9; }
-            .footer { padding: 20px; text-align: center; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>C4E Africa</h1>
-            </div>
-            <div class="content">
-              <h2>Bonjour ${nom},</h2>
-              <p>Nous vous remercions vivement d'avoir postulé pour le poste de <strong>${typePoste}</strong> au sein de <strong>C4E Africa</strong>.</p>
-              <p>Votre profil présente de très bonnes compétences, mais après une analyse approfondie des candidatures, nous avons décidé de retenir un profil correspondant davantage aux exigences immédiates du poste.</p>
-              <p>Nous conserverons néanmoins votre CV et n'hésiterons pas à revenir vers vous si une opportunité plus adaptée à votre parcours se présente.</p>
-              <p>Nous vous souhaitons sincèrement beaucoup de réussite dans vos futurs projets professionnels.</p>
-            </div>
-            <div class="footer">
-              <p>Cordialement,<br><strong>L'équipe des Ressources Humaines</strong><br>C4E Africa</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
-    } else {
-      console.log('⚠️  Statut non géré pour envoi email:', statut);
-      return;
-    }
+if (statut === 'acceptee') {
+  sujet = 'Félicitations ! Votre candidature a été retenue - C4E Africa';
+  html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #2e7d32; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .footer { padding: 20px; text-align: center; color: #666; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>C4E Africa</h1>
+        </div>
+        <div class="content">
+          <h2>Bonjour ${nom},</h2>
+          <p>Nous avons le plaisir de vous informer que votre candidature pour le poste de <strong>${typePoste}</strong> a été <strong style="color: #2e7d32;">acceptée</strong>.</p>
+          <p>Notre équipe RH vous contactera très prochainement afin de planifier un entretien et finaliser les prochaines étapes du processus.</p>
+          <p>Nous vous remercions pour l'intérêt que vous portez à <strong>C4E Africa</strong> et nous avons hâte d'échanger avec vous.</p>
+        </div>
+        <div class="footer">
+          <p>Cordialement,<br><strong>L'équipe des Ressources Humaines</strong><br>C4E Africa</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+} else if (statut === 'refusee') {
+  sujet = 'Réponse à votre candidature - C4E Africa';
+  html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #d32f2f; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f9f9f9; }
+        .footer { padding: 20px; text-align: center; color: #666; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>C4E Africa</h1>
+        </div>
+        <div class="content">
+          <h2>Bonjour ${nom},</h2>
+          <p>Nous vous remercions vivement d'avoir postulé pour le poste de <strong>${typePoste}</strong> au sein de <strong>C4E Africa</strong>.</p>
+          <p>Votre profil présente de très bonnes compétences, mais après une analyse approfondie des candidatures, nous avons décidé de retenir un profil correspondant davantage aux exigences immédiates du poste.</p>
+          <p>Nous conserverons néanmoins votre CV et n’hésiterons pas à revenir vers vous si une opportunité plus adaptée à votre parcours se présente.</p>
+          <p>Nous vous souhaitons sincèrement beaucoup de réussite dans vos futurs projets professionnels.</p>
+        </div>
+        <div class="footer">
+          <p>Cordialement,<br><strong>L'équipe des Ressources Humaines</strong><br>C4E Africa</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+} else {
+  console.log('⚠️  Statut non géré pour envoi email:', statut);
+  return;
+}
+
 
     // Envoyer l'email
     const info = await transporter.sendMail({
@@ -608,6 +606,7 @@ router.get('/spontanees/toutes', async (req, res) => {
 });
 
 // 🔹 Route spécifique pour stage_spontane
+// 🔹 Route spécifique pour stage_spontane (stages spontanés)
 router.put('/statut/stage_spontane/:id', async (req, res) => {
   const { id } = req.params;
   const { statut } = req.body;
@@ -676,82 +675,4 @@ router.put('/statut/stage_spontane/:id', async (req, res) => {
   }
 });
 
-// 📂 ROUTES ADMIN AVEC MIDDLEWARE verifyAdmin
-
-// Route pour récupérer toutes les candidatures Stage/PFE (admin seulement)
-router.get("/stage/toutes", verifyAdmin, async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        id,
-        nom,
-        prenom,
-        email,
-        telephone,
-        cv_path as "cvUrl",
-        lettre_motivation as "lettreMotivationUrl",
-        domaine,
-        duree,
-        poste,
-        type_etablissement,
-        diplome,
-        experience,
-        competences,
-        date_soumission as "dateSoumission",
-        statut,
-        type
-      FROM candidatures_stage 
-      ORDER BY date_soumission DESC
-    `);
-    
-    console.log(`✅ ${result.rows.length} candidatures Stage/PFE trouvées`);
-    
-    res.json(result.rows);
-  } catch (err) {
-    console.error('❌ Erreur récupération candidatures Stage/PFE:', err);
-    res.status(500).json({ 
-      message: 'Erreur serveur lors de la récupération des candidatures Stage/PFE',
-      error: err.message 
-    });
-  }
-});
-
-// Route pour récupérer toutes les candidatures spontanées générales (admin seulement)
-router.get("/spontanees/toutes", verifyAdmin, async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        id,
-        nom,
-        prenom,
-        email,
-        telephone,
-        cv_path as "cvUrl",
-        lettre_motivation as "lettreMotivationUrl",
-        poste,
-        type_etablissement,
-        diplome,
-        experience,
-        competences,
-        score as "competenceScore",
-        date_soumission as "dateSoumission",
-        statut,
-        type
-      FROM candidatures_spontanees 
-      ORDER BY date_soumission DESC
-    `);
-    
-    console.log(`✅ ${result.rows.length} candidatures spontanées générales trouvées`);
-    
-    res.json(result.rows);
-  } catch (err) {
-    console.error('❌ Erreur récupération candidatures spontanées:', err);
-    res.status(500).json({ 
-      message: 'Erreur serveur lors de la récupération des candidatures spontanées',
-      error: err.message 
-    });
-  }
-});
-
-// 🔥 CORRECTION : Exportez correctement le routeur
 module.exports = router;

@@ -4,75 +4,19 @@ const pool = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
-// Middleware verifyToken
-const verifyToken = (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: "Token manquant" });
-    }
-
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    req.user = decoded;
-    next();
-  } catch (err) {
-    console.error("Middleware verifyToken error:", err.message);
-    
-    if (err.name === "TokenExpiredError") {
-      return res.status(401).json({ message: "Token expiré" });
-    } else if (err.name === "JsonWebTokenError") {
-      return res.status(401).json({ message: "Token invalide" });
-    } else {
-      return res.status(401).json({ message: "Erreur d'authentification" });
-    }
-  }
-};
-
-// Middleware verifyAdmin
-const verifyAdmin = (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: "Token manquant" });
-    }
-
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Vérifier si l'utilisateur est admin
-    if (decoded.role !== 'admin' && decoded.type !== 'administrateur') {
-      return res.status(403).json({ message: "Accès réservé aux administrateurs" });
-    }
-    
-    req.user = decoded;
-    next();
-  } catch (err) {
-    console.error("Middleware verifyAdmin error:", err.message);
-    
-    if (err.name === "TokenExpiredError") {
-      return res.status(401).json({ message: "Token expiré" });
-    } else if (err.name === "JsonWebTokenError") {
-      return res.status(401).json({ message: "Token invalide" });
-    } else {
-      return res.status(401).json({ message: "Erreur d'authentification" });
-    }
-  }
-};
-
-// POST /api/auth/login
+// POST /api/auth/login - VERSION ROBUSTE
 router.post('/login', async (req, res) => {
-  console.log("📨 REQUÊTE LOGIN REÇUE:");
-  console.log("📨 Body:", req.body);
+  const { email, motDePasse, type } = req.body;
   
-  const { email, motDePasse } = req.body;
-  
+  console.log("🔐 Tentative de connexion:", { 
+    email: email, 
+    type: type,
+    hasPassword: !!motDePasse 
+  });
+
+  // Validation des champs requis
   if (!email || !motDePasse) {
-    console.log("❌ Champs manquants:", {
-      email: email, 
-      motDePasse: motDePasse
-    });
+    console.log("❌ Champs manquants");
     return res.status(400).json({ 
       message: 'Email et mot de passe requis.',
       champsManquants: {
@@ -82,6 +26,15 @@ router.post('/login', async (req, res) => {
     });
   }
 
+  // Détermination de la table
+  let table = 'gestionnaires'; // par défaut
+  if (type === 'admin' || type === 'administrateur') {
+    table = 'admin';
+  }
+  
+  console.log("📊 Table cible:", table);
+
+  // Vérification JWT_SECRET
   if (!process.env.JWT_SECRET) {
     console.error('🚨 JWT_SECRET non défini !');
     return res.status(500).json({ 
@@ -91,29 +44,40 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    console.log("🔍 Recherche dans la table utilisateurs...");
-    const userResult = await pool.query(
-      `SELECT id, nom, email, mot_de_passe, role, type, statut, sites_geres
-       FROM utilisateurs 
-       WHERE email = $1 AND statut = 'actif'`,
+    // Recherche de l'utilisateur
+    console.log("🔍 Recherche utilisateur:", email);
+    const result = await pool.query(
+      `SELECT id, email, mot_de_passe, role, COALESCE(statut, 'actif') as statut 
+       FROM ${table} 
+       WHERE email = $1`,
       [email]
     );
 
-    if (userResult.rows.length === 0) {
-      console.log("❌ Utilisateur non trouvé ou compte inactif:", email);
+    if (result.rows.length === 0) {
+      console.log("❌ Utilisateur non trouvé:", email);
       return res.status(401).json({ 
         message: 'Email ou mot de passe incorrect.',
         code: 'UTILISATEUR_NON_TROUVE'
       });
     }
 
-    const user = userResult.rows[0];
+    const user = result.rows[0];
     console.log("👤 Utilisateur trouvé:", { 
       id: user.id, 
       email: user.email, 
       role: user.role,
-      type: user.type
+      statut: user.statut 
     });
+
+    // Vérification du statut
+    if (user.statut !== 'actif') {
+      console.log("❌ Compte inactif:", user.email);
+      return res.status(403).json({ 
+        message: 'Votre compte est désactivé. Contactez un administrateur.',
+        code: 'COMPTE_DESACTIVE',
+        statut: user.statut
+      });
+    }
 
     // Vérification du mot de passe
     console.log("🔐 Vérification mot de passe...");
@@ -130,7 +94,7 @@ router.post('/login', async (req, res) => {
     // Mise à jour dernière connexion
     try {
       await pool.query(
-        `UPDATE utilisateurs SET dernier_connexion = NOW() WHERE id = $1`,
+        `UPDATE ${table} SET dernier_connexion = NOW() WHERE id = $1`,
         [user.id]
       );
       console.log("✅ Dernière connexion mise à jour");
@@ -144,7 +108,7 @@ router.post('/login', async (req, res) => {
       id: user.id,
       email: user.email,
       role: user.role,
-      type: user.type
+      type: table === 'admin' ? 'admin' : 'gestionnaire'
     };
 
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { 
@@ -152,21 +116,19 @@ router.post('/login', async (req, res) => {
     });
 
     console.log("✅ Connexion réussie pour:", user.email);
-    console.log("👤 Type d'utilisateur:", user.type);
+    console.log("🔑 Token généré - Expiration: 24h");
 
     // Réponse réussie
     res.json({
       message: 'Connexion réussie',
-      token: token,
       user: {
         id: user.id,
-        nom: user.nom,
         email: user.email,
         role: user.role,
-        type: user.type,
-        statut: user.statut,
-        sites_geres: user.sites_geres
+        type: table === 'admin' ? 'admin' : 'gestionnaire',
+        statut: user.statut
       },
+      token: token,
       expiresIn: '24h'
     });
 
@@ -180,7 +142,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Route pour vérifier le token
+// POST /api/auth/verify - Vérification de token
 router.post('/verify', async (req, res) => {
   const { token } = req.body;
 
@@ -194,31 +156,39 @@ router.post('/verify', async (req, res) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
+    // Vérifier que l'utilisateur existe toujours
+    const table = decoded.type === 'admin' ? 'admin' : 'gestionnaires';
     const userExists = await pool.query(
-      `SELECT id, email, role, type, statut, nom, prenom
-       FROM utilisateurs 
-       WHERE id = $1 AND email = $2 AND statut = 'actif'`,
+      `SELECT id, email, role, COALESCE(statut, 'actif') as statut 
+       FROM ${table} 
+       WHERE id = $1 AND email = $2`,
       [decoded.id, decoded.email]
     );
 
     if (userExists.rows.length === 0) {
       return res.status(401).json({ 
-        message: 'Utilisateur non trouvé ou compte inactif',
+        message: 'Utilisateur non trouvé',
         valid: false
       });
     }
 
     const user = userExists.rows[0];
     
+    if (user.statut !== 'actif') {
+      return res.status(403).json({ 
+        message: 'Compte désactivé',
+        valid: false,
+        statut: user.statut
+      });
+    }
+
     res.json({
       valid: true,
       user: {
         id: user.id,
         email: user.email,
         role: user.role,
-        type: user.type,
-        nom: user.nom,
-        prenom: user.prenom
+        type: decoded.type
       },
       expiresIn: decoded.exp
     });
@@ -232,16 +202,21 @@ router.post('/verify', async (req, res) => {
         valid: false,
         expired: true
       });
-    } else {
+    } else if (err.name === "JsonWebTokenError") {
       return res.status(401).json({ 
         message: 'Token invalide',
+        valid: false
+      });
+    } else {
+      return res.status(401).json({ 
+        message: 'Erreur de vérification',
         valid: false
       });
     }
   }
 });
 
-// Route pour obtenir les infos de l'utilisateur connecté
+// GET /api/auth/me - Récupération info utilisateur connecté
 router.get('/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   
@@ -256,12 +231,13 @@ router.get('/me', async (req, res) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const table = decoded.type === 'admin' ? 'admin' : 'gestionnaires';
     
     const userResult = await pool.query(
-      `SELECT id, email, role, type, statut, nom, prenom, 
-              date_creation, dernier_connexion, telephone, sites_geres
-       FROM utilisateurs 
-       WHERE id = $1 AND email = $2 AND statut = 'actif'`,
+      `SELECT id, email, role, COALESCE(statut, 'actif') as statut, 
+              date_creation, dernier_connexion
+       FROM ${table} 
+       WHERE id = $1 AND email = $2`,
       [decoded.id, decoded.email]
     );
 
@@ -280,12 +256,8 @@ router.get('/me', async (req, res) => {
         id: user.id,
         email: user.email,
         role: user.role,
-        type: user.type,
+        type: decoded.type,
         statut: user.statut,
-        nom: user.nom,
-        prenom: user.prenom,
-        telephone: user.telephone,
-        sites_geres: user.sites_geres,
         date_creation: user.date_creation,
         dernier_connexion: user.dernier_connexion
       }
@@ -301,89 +273,4 @@ router.get('/me', async (req, res) => {
   }
 });
 
-// Route changement de mot de passe
-router.put("/change-password", verifyToken, async (req, res) => {
-  try {
-    console.log("🔄 REQUÊTE CHANGE-PASSWORD REÇUE:");
-    console.log("📦 Body:", req.body);
-    console.log("👤 User from token:", req.user);
-    
-    const { currentPassword, newPassword, confirmPassword } = req.body;
-    const userId = req.user.id;
-
-    // Validation
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      return res.status(400).json({ 
-        message: "Tous les champs sont requis" 
-      });
-    }
-
-    if (newPassword !== confirmPassword) {
-      return res.status(400).json({ 
-        message: "Les nouveaux mots de passe ne correspondent pas" 
-      });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({ 
-        message: "Le nouveau mot de passe doit contenir au moins 6 caractères" 
-      });
-    }
-
-    // Récupérer l'utilisateur
-    const userResult = await pool.query(
-      `SELECT id, email, mot_de_passe FROM utilisateurs WHERE id = $1`,
-      [userId]
-    );
-
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ 
-        message: "Utilisateur non trouvé" 
-      });
-    }
-
-    const user = userResult.rows[0];
-
-    // Vérifier le mot de passe actuel
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.mot_de_passe);
-    
-    if (!isCurrentPasswordValid) {
-      return res.status(400).json({ 
-        message: "Le mot de passe actuel est incorrect" 
-      });
-    }
-
-    // Hashage du nouveau mot de passe
-    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-
-    // Mise à jour en base
-    const updateResult = await pool.query(
-      `UPDATE utilisateurs 
-       SET mot_de_passe = $1, date_modification = NOW() 
-       WHERE id = $2
-       RETURNING id, email, date_modification`,
-      [hashedNewPassword, userId]
-    );
-
-    console.log("✅ Mise à jour réussie:", updateResult.rows[0]);
-
-    res.json({ 
-      message: "Mot de passe mis à jour avec succès",
-      success: true
-    });
-
-  } catch (err) {
-    console.error("❌ ERREUR CHANGE PASSWORD:", err);
-    res.status(500).json({ 
-      message: "Erreur serveur lors du changement de mot de passe",
-      error: process.env.NODE_ENV === 'development' ? err.message : 'Erreur interne'
-    });
-  }
-});
-
-// Exportez le router ET les middlewares
-module.exports = {
-  router,
-  verifyAdmin,
-  verifyToken
-};
+module.exports = router;
