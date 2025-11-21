@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 // POST /api/auth/login - VERSION ROBUSTE
+// POST /api/auth/login - VERSION CORRIGÉE
 router.post('/login', async (req, res) => {
   const { email, motDePasse, type } = req.body;
   
@@ -26,14 +27,6 @@ router.post('/login', async (req, res) => {
     });
   }
 
-  // Détermination de la table
-  let table = 'gestionnaires'; // par défaut
-  if (type === 'admin' || type === 'administrateur') {
-    table = 'admin';
-  }
-  
-  console.log("📊 Table cible:", table);
-
   // Vérification JWT_SECRET
   if (!process.env.JWT_SECRET) {
     console.error('🚨 JWT_SECRET non défini !');
@@ -44,11 +37,11 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    // Recherche de l'utilisateur
+    // Recherche de l'utilisateur dans la table utilisateurs
     console.log("🔍 Recherche utilisateur:", email);
     const result = await pool.query(
-      `SELECT id, email, mot_de_passe, role, COALESCE(statut, 'actif') as statut 
-       FROM ${table} 
+      `SELECT id, nom, email, mot_de_passe, role, type, COALESCE(statut, 'actif') as statut 
+       FROM utilisateurs 
        WHERE email = $1`,
       [email]
     );
@@ -64,8 +57,10 @@ router.post('/login', async (req, res) => {
     const user = result.rows[0];
     console.log("👤 Utilisateur trouvé:", { 
       id: user.id, 
+      nom: user.nom,
       email: user.email, 
       role: user.role,
+      type: user.type,
       statut: user.statut 
     });
 
@@ -76,6 +71,15 @@ router.post('/login', async (req, res) => {
         message: 'Votre compte est désactivé. Contactez un administrateur.',
         code: 'COMPTE_DESACTIVE',
         statut: user.statut
+      });
+    }
+
+    // Vérification du type si spécifié
+    if (type && user.type !== type) {
+      console.log("❌ Type incorrect:", { expected: type, actual: user.type });
+      return res.status(401).json({ 
+        message: 'Type de compte incorrect.',
+        code: 'TYPE_INCORRECT'
       });
     }
 
@@ -94,7 +98,7 @@ router.post('/login', async (req, res) => {
     // Mise à jour dernière connexion
     try {
       await pool.query(
-        `UPDATE ${table} SET dernier_connexion = NOW() WHERE id = $1`,
+        `UPDATE utilisateurs SET dernier_connexion = NOW() WHERE id = $1`,
         [user.id]
       );
       console.log("✅ Dernière connexion mise à jour");
@@ -108,7 +112,7 @@ router.post('/login', async (req, res) => {
       id: user.id,
       email: user.email,
       role: user.role,
-      type: table === 'admin' ? 'admin' : 'gestionnaire'
+      type: user.type
     };
 
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { 
@@ -123,9 +127,10 @@ router.post('/login', async (req, res) => {
       message: 'Connexion réussie',
       user: {
         id: user.id,
+        nom: user.nom,
         email: user.email,
         role: user.role,
-        type: table === 'admin' ? 'admin' : 'gestionnaire',
+        type: user.type,
         statut: user.statut
       },
       token: token,
@@ -141,7 +146,6 @@ router.post('/login', async (req, res) => {
     });
   }
 });
-
 // POST /api/auth/verify - Vérification de token
 router.post('/verify', async (req, res) => {
   const { token } = req.body;
