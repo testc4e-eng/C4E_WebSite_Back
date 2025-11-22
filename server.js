@@ -110,6 +110,7 @@ const offresRoutes = require('./routes/offres');
 // 🔥 MONTAGE CORRECT des routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/contact', contactRoutes); // Route temporaire
 app.use('/api/contact', contactRoutes); // Changé de '/contact' à '/api/contact'
 app.use('/api/candidatures', candidaturesRoutes);
 app.use('/api/candidatures/spontanees', candidatureSpontaneeRoutes);
