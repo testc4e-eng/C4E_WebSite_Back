@@ -42,18 +42,24 @@ router.post('/', async (req, res) => {
 
     // 4️⃣ Configuration du transporteur Nodemailer
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT) || 587, // Essayez le port 587
-  secure: false, // Forcez à false pour le port 587
+  host: 'smtp.gmail.com',
+  port: 587, // Port alternatif
+  secure: false, // false pour le port 587
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  // Options pour Render
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
   tls: {
-    rejectUnauthorized: false // Peut aider avec les certificats
-  }
+    rejectUnauthorized: false,
+    ciphers: 'SSLv3'
+  },
+  debug: true,
+  logger: true
 });
-
     // 5️⃣ Vérification de la connexion SMTP
     console.log('🔄 Test de connexion SMTP...');
     await transporter.verify();
