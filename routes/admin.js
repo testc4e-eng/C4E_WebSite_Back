@@ -398,48 +398,6 @@ router.put("/:type/:id/password", verifyAdmin, async (req, res) => {
   }
 });
 
-router.put("/change-password", verifyToken, async (req, res) => {
-  try {
-    const userId = req.user.id;
-
-    const { currentPassword, newPassword, confirmPassword } = req.body;
-
-    // validations
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      return res.status(400).json({ message: "Tous les champs sont requis" });
-    }
-
-    if (newPassword !== confirmPassword) {
-      return res.status(400).json({ message: "Les mots de passe ne correspondent pas" });
-    }
-
-    // Vérifier ancien mot de passe
-    const user = await pool.query(
-      "SELECT mot_de_passe FROM utilisateurs WHERE id = $1",
-      [userId]
-    );
-
-    const isValid = await bcrypt.compare(currentPassword, user.rows[0].mot_de_passe);
-    if (!isValid) {
-      return res.status(400).json({ message: "Mot de passe actuel incorrect" });
-    }
-
-    // Hash + update
-    const hashed = await bcrypt.hash(newPassword, 10);
-
-    await pool.query(
-      "UPDATE utilisateurs SET mot_de_passe = $1 WHERE id = $2",
-      [hashed, userId]
-    );
-
-    res.json({ success: true, message: "Mot de passe modifié avec succès" });
-
-  } catch (err) {
-    res.status(500).json({ message: "Erreur serveur", error: err.message });
-  }
-});
-
-
 // PUT - Changer le statut
 router.put("/:type/:id/status", verifyAdmin, async (req, res) => {
   try {
