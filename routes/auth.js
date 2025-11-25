@@ -279,139 +279,30 @@ router.get('/me', async (req, res) => {
 
 // PUT /api/auth/change-password - Changement de mot de passe
 router.put('/change-password', async (req, res) => {
-  const authHeader = req.headers.authorization;
+  console.log("=== 🔐 CHANGEMENT MOT DE PASSE SIMPLIFIÉ ===");
   
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ 
-      message: 'Token d\'authentification requis',
-      code: 'TOKEN_MANQUANT'
-    });
-  }
-
-  const token = authHeader.split(" ")[1];
-  const { currentPassword, newPassword, confirmPassword } = req.body;
-
-  console.log("🔐 Tentative changement mot de passe");
-
-  // Validation des champs
-  if (!currentPassword || !newPassword || !confirmPassword) {
-    return res.status(400).json({ 
-      message: 'Tous les champs sont obligatoires',
-      code: 'CHAMPS_MANQUANTS',
-      champsManquants: {
-        currentPassword: !currentPassword,
-        newPassword: !newPassword,
-        confirmPassword: !confirmPassword
-      }
-    });
-  }
-
-  if (newPassword.length < 6) {
-    return res.status(400).json({ 
-      message: 'Le nouveau mot de passe doit contenir au moins 6 caractères',
-      code: 'MOT_DE_PASSE_TROP_COURT'
-    });
-  }
-
-  if (newPassword !== confirmPassword) {
-    return res.status(400).json({ 
-      message: 'Les nouveaux mots de passe ne correspondent pas',
-      code: 'MOTS_DE_PASSE_DIFFERENTS'
-    });
-  }
-
   try {
-    // Vérification du token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Recherche de l'utilisateur
-    console.log("🔍 Recherche utilisateur:", decoded.email);
-    const userResult = await pool.query(
-      `SELECT id, email, mot_de_passe, role, type, COALESCE(statut, 'actif') as statut 
-       FROM utilisateurs 
-       WHERE id = $1 AND email = $2`,
-      [decoded.id, decoded.email]
-    );
+    // Log des entrées
+    console.log("📦 Body reçu:", req.body);
+    console.log("🔑 Headers auth:", req.headers.authorization ? "Présent" : "Manquant");
 
-    if (userResult.rows.length === 0) {
-      console.log("❌ Utilisateur non trouvé");
-      return res.status(404).json({ 
-        message: 'Utilisateur non trouvé',
-        code: 'UTILISATEUR_NON_TROUVE'
-      });
-    }
-
-    const user = userResult.rows[0];
-    
-    // Vérification du statut
-    if (user.statut !== 'actif') {
-      return res.status(403).json({ 
-        message: 'Compte désactivé',
-        code: 'COMPTE_DESACTIVE'
-      });
-    }
-
-    // Vérification du mot de passe actuel
-    console.log("🔐 Vérification mot de passe actuel...");
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.mot_de_passe);
-    
-    if (!isCurrentPasswordValid) {
-      console.log("❌ Mot de passe actuel incorrect");
-      return res.status(401).json({ 
-        message: 'Mot de passe actuel incorrect',
-        code: 'MOT_DE_PASSE_ACTUEL_INCORRECT'
-      });
-    }
-
-    // Vérification que le nouveau mot de passe est différent de l'ancien
-    const isSamePassword = await bcrypt.compare(newPassword, user.mot_de_passe);
-    if (isSamePassword) {
-      return res.status(400).json({ 
-        message: 'Le nouveau mot de passe doit être différent de l\'ancien',
-        code: 'MOT_DE_PASSE_IDENTIQUE'
-      });
-    }
-
-    // Hash du nouveau mot de passe
-    console.log("🔑 Hash du nouveau mot de passe...");
-    const saltRounds = 10;
-    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
-
-    // Mise à jour dans la base de données
-    console.log("💾 Mise à jour en base de données...");
-    await pool.query(
-      `UPDATE utilisateurs 
-       SET mot_de_passe = $1, date_modification = NOW() 
-       WHERE id = $2`,
-      [hashedNewPassword, user.id]
-    );
-
-    console.log("✅ Mot de passe changé avec succès pour:", user.email);
-
+    // Réponse de test immédiate
     res.json({
-      message: 'Mot de passe changé avec succès',
-      code: 'MOT_DE_PASSE_MODIFIE'
+      message: 'TEST - Changement mot de passe reçu',
+      success: true,
+      received: {
+        currentPassword: !!req.body.currentPassword,
+        newPassword: !!req.body.newPassword, 
+        confirmPassword: !!req.body.confirmPassword
+      },
+      test: true
     });
 
   } catch (err) {
-    console.error('❌ Erreur /api/auth/change-password:', err);
-
-    if (err.name === "JsonWebTokenError") {
-      return res.status(401).json({ 
-        message: 'Token invalide',
-        code: 'TOKEN_INVALIDE'
-      });
-    } else if (err.name === "TokenExpiredError") {
-      return res.status(401).json({ 
-        message: 'Token expiré',
-        code: 'TOKEN_EXPIRE'
-      });
-    }
-
+    console.error('❌ Erreur simplifiée:', err);
     res.status(500).json({ 
-      message: 'Erreur serveur lors du changement de mot de passe',
-      code: 'ERREUR_SERVEUR',
-      error: err.message
+      message: 'Erreur test',
+      error: err.message 
     });
   }
 });
