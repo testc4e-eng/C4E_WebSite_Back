@@ -303,7 +303,9 @@ router.get('/me', verifyToken, async (req, res) => {
   }
 });
 
-// PUT /api/auth/change-password - Changement de mot de passe (FONCTIONNEL)
+// 📂 routes/auth.js - CORRECTION ENDPOINT CHANGE-PASSWORD
+
+// PUT /api/auth/change-password - VERSION CORRIGÉE
 router.put('/change-password', verifyToken, async (req, res) => {
   console.log("=== 🔐 CHANGEMENT MOT DE PASSE ===");
   
@@ -313,18 +315,12 @@ router.put('/change-password', verifyToken, async (req, res) => {
     // Log des entrées
     console.log("📦 Body reçu:", req.body);
     console.log("👤 User:", req.user);
-    console.log("🔑 Headers auth:", req.headers.authorization ? "Présent" : "Manquant");
 
     // Validation des champs
     if (!currentPassword || !newPassword || !confirmPassword) {
       return res.status(400).json({ 
         message: 'Tous les champs sont obligatoires',
-        code: 'CHAMPS_MANQUANTS',
-        champsManquants: {
-          currentPassword: !currentPassword,
-          newPassword: !newPassword,
-          confirmPassword: !confirmPassword
-        }
+        code: 'CHAMPS_MANQUANTS'
       });
     }
 
@@ -395,18 +391,17 @@ router.put('/change-password', verifyToken, async (req, res) => {
     const saltRounds = 12;
     const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
 
-    // Mise à jour dans la base de données
+    // Mise à jour dans la base de données - SANS date_modification
     console.log("💾 Mise à jour en base de données...");
     const updateResult = await pool.query(
       `UPDATE utilisateurs 
-       SET mot_de_passe = $1, date_modification = NOW() 
+       SET mot_de_passe = $1, date_creation = NOW() 
        WHERE id = $2
        RETURNING id, email`,
       [hashedNewPassword, user.id]
     );
 
     console.log("✅ Mot de passe changé avec succès pour:", user.email);
-    console.log("📊 Résultat mise à jour:", updateResult.rows[0]);
 
     res.json({
       message: 'Mot de passe changé avec succès',
@@ -417,18 +412,6 @@ router.put('/change-password', verifyToken, async (req, res) => {
   } catch (err) {
     console.error('❌ Erreur /api/auth/change-password:', err);
     
-    if (err.name === "JsonWebTokenError") {
-      return res.status(401).json({ 
-        message: 'Token invalide',
-        code: 'TOKEN_INVALIDE'
-      });
-    } else if (err.name === "TokenExpiredError") {
-      return res.status(401).json({ 
-        message: 'Token expiré',
-        code: 'TOKEN_EXPIRE'
-      });
-    }
-
     res.status(500).json({ 
       message: 'Erreur serveur lors du changement de mot de passe',
       code: 'ERREUR_SERVEUR',
@@ -437,7 +420,7 @@ router.put('/change-password', verifyToken, async (req, res) => {
   }
 });
 
-// POST /api/auth/change-password - Version alternative (identique au PUT)
+// POST /api/auth/change-password - Version alternative CORRIGÉE
 router.post('/change-password', verifyToken, async (req, res) => {
   console.log("=== 🔐 CHANGEMENT MOT DE PASSE (POST) ===");
   
@@ -493,11 +476,11 @@ router.post('/change-password', verifyToken, async (req, res) => {
       });
     }
 
-    // Hash et mise à jour
+    // Hash et mise à jour - SANS date_modification
     const hashedNewPassword = await bcrypt.hash(newPassword, 12);
     await pool.query(
       `UPDATE utilisateurs 
-       SET mot_de_passe = $1, date_modification = NOW() 
+       SET mot_de_passe = $1, date_creation = NOW() 
        WHERE id = $2`,
       [hashedNewPassword, user.id]
     );

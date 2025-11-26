@@ -731,6 +731,9 @@ router.delete("/:id", async (req, res) => {
 });
 
 // DELETE candidature spontanée - ENDPOINT SIMPLIFIÉ
+// 📂 routes/candidatures.js - REMPLACEZ L'ENDPOINT DELETE SPONTANEES
+
+// DELETE candidature spontanée - VERSION ULTRA-SIMPLIFIÉE
 router.delete("/spontanees/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -742,7 +745,7 @@ router.delete("/spontanees/:id", async (req, res) => {
       [id]
     );
 
-    // Si pas trouvé, essayer dans candidatures_stage (pour stage_spontane)
+    // Si pas trouvé, essayer dans candidatures_stage
     if (result.rows.length === 0) {
       result = await pool.query(
         'DELETE FROM candidatures_stage WHERE id = $1 RETURNING id, nom, prenom',
@@ -751,7 +754,7 @@ router.delete("/spontanees/:id", async (req, res) => {
     }
 
     if (result.rows.length === 0) {
-      console.log("❌ Candidature spontanée introuvable, ID:", id);
+      console.log("❌ Candidature spontanée introuvable dans les deux tables, ID:", id);
       return res.status(404).json({ 
         message: "Candidature spontanée non trouvée",
         code: "CANDIDATURE_SPONTANEE_NON_TROUVEE"
