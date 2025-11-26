@@ -675,4 +675,147 @@ router.put('/statut/stage_spontane/:id', async (req, res) => {
   }
 });
 
+// DELETE candidature normale - ENDPOINT SIMPLIFIÉ
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log("🗑️ DELETE /api/candidatures/:id - ID:", id);
+
+    // Essayer d'abord dans candidatures_emploi
+    let result = await pool.query(
+      'DELETE FROM candidatures_emploi WHERE id = $1 RETURNING id, nom, prenom',
+      [id]
+    );
+
+    // Si pas trouvé, essayer dans candidatures_spontanees
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        'DELETE FROM candidatures_spontanees WHERE id = $1 RETURNING id, nom, prenom',
+        [id]
+      );
+    }
+
+    // Si pas trouvé, essayer dans candidatures_stage
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        'DELETE FROM candidatures_stage WHERE id = $1 RETURNING id, nom, prenom',
+        [id]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      console.log("❌ Candidature introuvable dans toutes les tables, ID:", id);
+      return res.status(404).json({ 
+        message: "Candidature non trouvée",
+        code: "CANDIDATURE_NON_TROUVEE"
+      });
+    }
+
+    const nomComplet = `${result.rows[0].nom} ${result.rows[0].prenom}`.trim();
+    console.log("✅ Candidature supprimée:", nomComplet);
+    
+    res.json({ 
+      message: `Candidature de ${nomComplet} supprimée avec succès`,
+      success: true,
+      candidature: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error("❌ Erreur suppression candidature:", err);
+    res.status(500).json({ 
+      message: "Erreur lors de la suppression de la candidature",
+      error: err.message,
+      code: "ERREUR_SUPPRESSION"
+    });
+  }
+});
+
+// DELETE candidature spontanée - ENDPOINT SIMPLIFIÉ
+router.delete("/spontanees/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log("🗑️ DELETE /api/candidatures/spontanees/:id - ID:", id);
+
+    // Essayer dans candidatures_spontanees
+    let result = await pool.query(
+      'DELETE FROM candidatures_spontanees WHERE id = $1 RETURNING id, nom, prenom',
+      [id]
+    );
+
+    // Si pas trouvé, essayer dans candidatures_stage (pour stage_spontane)
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        'DELETE FROM candidatures_stage WHERE id = $1 RETURNING id, nom, prenom',
+        [id]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      console.log("❌ Candidature spontanée introuvable, ID:", id);
+      return res.status(404).json({ 
+        message: "Candidature spontanée non trouvée",
+        code: "CANDIDATURE_SPONTANEE_NON_TROUVEE"
+      });
+    }
+
+    const nomComplet = `${result.rows[0].nom} ${result.rows[0].prenom}`.trim();
+    console.log("✅ Candidature spontanée supprimée:", nomComplet);
+    
+    res.json({ 
+      message: `Candidature spontanée de ${nomComplet} supprimée avec succès`,
+      success: true,
+      candidature: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error("❌ Erreur suppression candidature spontanée:", err);
+    res.status(500).json({ 
+      message: "Erreur lors de la suppression de la candidature spontanée",
+      error: err.message,
+      code: "ERREUR_SUPPRESSION_SPONTANEE"
+    });
+  }
+});
+
+// Route de diagnostic pour vérifier où se trouve une candidature
+router.get("/check/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log("🔍 Vérification candidature ID:", id);
+
+    const results = await Promise.all([
+      pool.query('SELECT id, nom, prenom, email FROM candidatures_emploi WHERE id = $1', [id]),
+      pool.query('SELECT id, nom, prenom, email FROM candidatures_spontanees WHERE id = $1', [id]),
+      pool.query('SELECT id, nom, prenom, email FROM candidatures_stage WHERE id = $1', [id])
+    ]);
+
+    const foundIn = [];
+    const data = {};
+
+    if (results[0].rows.length > 0) {
+      foundIn.push('candidatures_emploi');
+      data.candidatures_emploi = results[0].rows[0];
+    }
+    if (results[1].rows.length > 0) {
+      foundIn.push('candidatures_spontanees');
+      data.candidatures_spontanees = results[1].rows[0];
+    }
+    if (results[2].rows.length > 0) {
+      foundIn.push('candidatures_stage');
+      data.candidatures_stage = results[2].rows[0];
+    }
+
+    res.json({
+      id: parseInt(id),
+      foundIn,
+      data,
+      tablesChecked: ['candidatures_emploi', 'candidatures_spontanees', 'candidatures_stage']
+    });
+
+  } catch (err) {
+    console.error("❌ Erreur vérification:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
