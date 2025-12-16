@@ -679,7 +679,7 @@ app.put('/api/candidatures/:type/:id', async (req, res) => {
 /* ----------------------------
    START SERVEUR
    ---------------------------- */
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
   console.log(`\n🚀 ✅ Backend C4E Africa démarré sur le port ${PORT}`);
